@@ -20,21 +20,32 @@ export type MapRegion = {
   longitudeDelta: number;
 };
 
+/** Whose pins to show. */
+export type MapFilter = 'all' | 'mine';
+
 /**
- * Every post visible to the caller that has coordinates.
+ * Posts with coordinates that the caller can see.
  *
- * RLS already limits this to your own posts and your friends', so the map
- * needs no visibility rules of its own — the same policy that governs the feed
- * governs the pins.
+ * RLS already limits this to your own posts and your friends', so 'all' needs
+ * no visibility rules of its own — the same policy that governs the feed
+ * governs the pins. 'mine' narrows further, server-side, so a filtered map
+ * does not pull rows it will only discard.
  */
-export async function fetchLocatedPosts(): Promise<LocatedPost[]> {
-  const { data, error } = await supabase
+export async function fetchLocatedPosts(
+  filter: MapFilter = 'all',
+  selfId?: string
+): Promise<LocatedPost[]> {
+  let query = supabase
     .from('posts')
     .select('id, album_id, title, location, taken_at, latitude, longitude, image_path, blurhash')
     .not('latitude', 'is', null)
-    .not('longitude', 'is', null)
-    .order('taken_at', { ascending: false })
-    .limit(500);
+    .not('longitude', 'is', null);
+
+  if (filter === 'mine' && selfId) {
+    query = query.eq('author_id', selfId);
+  }
+
+  const { data, error } = await query.order('taken_at', { ascending: false }).limit(500);
 
   if (error) throw error;
 
