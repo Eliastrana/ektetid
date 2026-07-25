@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
+  Easing,
   FadeIn,
   FadeOut,
   LinearTransition,
@@ -27,10 +28,14 @@ const SELFIE_COLLAPSED = { width: 60, height: 80 };
 const SELFIE_EXPANDED = { width: 132, height: 176 };
 
 /**
- * Gentle spring rather than a bouncy one: this is a panel resizing under the
- * user's thumb, not an object being thrown, so overshoot reads as sloppiness.
+ * The selfie springs — it reads as a physical thing changing size.
+ *
+ * Text does not. A spring overshoots, and overshoot on a block of prose looks
+ * like the layout is unstable rather than lively, so the reflow is a plain
+ * ease-out instead.
  */
 const SPRING = { damping: 20, stiffness: 180, mass: 0.7 } as const;
+const REFLOW = LinearTransition.duration(240).easing(Easing.out(Easing.quad));
 
 function formatNorwegianDate(iso: string): string {
   const date = new Date(iso);
@@ -70,11 +75,11 @@ export function PostTile({ post, expanded, onToggle }: Props) {
       accessibilityHint={expanded ? 'Skjul detaljer' : 'Vis detaljer'}
       onPress={onToggle}
       disabled={!hasDetail}>
-      <Animated.View layout={LinearTransition.springify().damping(20).stiffness(180)}>
+      <Animated.View layout={REFLOW}>
         <View className="flex-row items-end gap-3">
           <Animated.View
             className="flex-1"
-            layout={LinearTransition.springify().damping(20).stiffness(180)}>
+            layout={REFLOW}>
             {post.title ? (
               <Text
                 className="text-3xl text-ink"
