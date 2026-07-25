@@ -1,10 +1,10 @@
-import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import { AlbumCard } from '@/components/album-card';
+import { AvatarPicker } from '@/components/avatar-picker';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import {
@@ -25,7 +25,7 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile, session } = useAuth();
+  const { profile, session, refreshProfile } = useAuth();
   const userId = session?.user.id;
 
   const [stats, setStats] = useState<ProfileStats | null>(null);
@@ -99,16 +99,17 @@ export default function ProfileScreen() {
               </View>
 
               <View className="mt-2 flex-row items-center gap-4">
-                {profile?.avatar_url ? (
-                  <Image
-                    source={{ uri: profile.avatar_url }}
-                    style={{ width: 72, height: 72, borderRadius: 36 }}
+                {userId ? (
+                  <AvatarPicker
+                    userId={userId}
+                    avatarUrl={profile?.avatar_url ?? null}
+                    initials={initials}
+                    onChanged={async () => {
+                      await refreshProfile();
+                      await load();
+                    }}
                   />
-                ) : (
-                  <View className="h-18 w-18 items-center justify-center rounded-full border border-glass-border bg-glass">
-                    <Text className="text-2xl text-ink">{initials}</Text>
-                  </View>
-                )}
+                ) : null}
                 <View className="flex-1">
                   <Text numberOfLines={1} className="text-3xl text-ink">
                     {profile?.display_name ?? profile?.username ?? 'Profil'}

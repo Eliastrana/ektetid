@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Screen } from '@/components/screen';
+import { errorMessage } from '@/lib/errors';
 
 import {
   SignInCancelled,
@@ -48,7 +49,7 @@ export default function SignInScreen() {
     } catch (caught) {
       if (caught instanceof SignInCancelled) return;
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setError(caught instanceof Error ? caught.message : 'Innloggingen feilet.');
+      setError(errorMessage(caught, 'Innloggingen feilet.'));
     } finally {
       setBusy(null);
     }

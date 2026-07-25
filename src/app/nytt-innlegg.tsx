@@ -16,6 +16,7 @@ import {
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { errorMessage } from '@/lib/errors';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
 import { createAlbum, listOwnAlbums, publishPost, type PublishProgress } from '@/lib/publish';
 
@@ -104,7 +105,7 @@ export default function NewPostScreen() {
       router.dismissTo('/');
     } catch (caught) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setError(caught instanceof Error ? caught.message : 'Klarte ikke å publisere.');
+      setError(errorMessage(caught, 'Klarte ikke å publisere.'));
     } finally {
       setProgress(null);
     }
