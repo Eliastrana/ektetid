@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
 
+import type { Coordinates } from '@/lib/geo';
 import { processImage, processSelfie } from '@/lib/image-pipeline';
 import type { PendingCapture } from '@/lib/pending-capture';
 import { supabase } from '@/lib/supabase';
@@ -14,6 +15,8 @@ export type PublishInput = {
   description: string;
   location: string;
   takenAt: Date;
+  /** Where the photo was taken, when known. Drives the map. */
+  coordinates: Coordinates | null;
 };
 
 export type PublishProgress = 'processing' | 'uploading' | 'saving';
@@ -83,6 +86,8 @@ export async function publishPost(
     p_exif: (input.capture.exif ?? undefined) as never,
     p_blurhash: image.blurhash,
     p_luminance: image.luminance,
+    p_latitude: input.coordinates?.latitude ?? undefined,
+    p_longitude: input.coordinates?.longitude ?? undefined,
   });
 
   if (error) {

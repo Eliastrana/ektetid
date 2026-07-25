@@ -4,8 +4,13 @@ export default function TabsLayout() {
   return (
     <NativeTabs backgroundColor="#000000" labelStyle={{ selected: { color: '#ffffff' } }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Album</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Øyeblikk</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="square.grid.2x2.fill" md="grid_view" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="kart">
+        <NativeTabs.Trigger.Label>Kart</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="map.fill" md="map" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="kamera">

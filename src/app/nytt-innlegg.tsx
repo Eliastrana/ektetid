@@ -18,6 +18,7 @@ import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { SelfieSlot } from '@/components/selfie-slot';
 import { errorMessage } from '@/lib/errors';
+import { exifCoordinates, type Coordinates } from '@/lib/geo';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
 import { createAlbum, listOwnAlbums, publishPost, type PublishProgress } from '@/lib/publish';
 
@@ -45,6 +46,11 @@ export default function NewPostScreen() {
   const [albumId, setAlbumId] = useState<string | null>(null);
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
   const [progress, setProgress] = useState<PublishProgress | null>(null);
+  // EXIF wins: a library photo was taken where it was taken, not where the
+  // user happens to be standing now.
+  const [coordinates, setCoordinates] = useState<Coordinates | null>(() =>
+    exifCoordinates(getPendingCapture()?.exif)
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,6 +74,13 @@ export default function NewPostScreen() {
         const position = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
+        if (!active) return;
+        // Only used when the photo carried no GPS of its own.
+        setCoordinates((current) => current ?? {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
         const [place] = await Location.reverseGeocodeAsync(position.coords);
         if (!active || !place) return;
         const label = [place.city ?? place.subregion, place.country].filter(Boolean).join(', ');
@@ -100,6 +113,7 @@ export default function NewPostScreen() {
           description,
           location,
           takenAt: new Date(),
+          coordinates,
         },
         setProgress
       );
@@ -116,6 +130,7 @@ export default function NewPostScreen() {
   }, [
     albumId,
     capture,
+    coordinates,
     description,
     location,
     newAlbumTitle,

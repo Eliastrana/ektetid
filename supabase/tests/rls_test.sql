@@ -19,11 +19,20 @@ values
   ('22222222-2222-2222-2222-222222222222', 'bob@example.com',     'authenticated', 'authenticated'),
   ('33333333-3333-3333-3333-333333333333', 'mallory@example.com', 'authenticated', 'authenticated');
 
--- handle_new_user() should have created a profile for each.
+-- handle_new_user() should have created a profile for each. Scoped to the
+-- fixture ids so the test does not assume an empty database — it has to pass
+-- against a dev database with real accounts in it too.
 do $$
+declare n integer;
 begin
-  if (select count(*) from public.profiles) <> 3 then
-    raise exception 'expected 3 auto-created profiles, got %', (select count(*) from public.profiles);
+  select count(*) into n from public.profiles
+   where id in (
+     '11111111-1111-1111-1111-111111111111',
+     '22222222-2222-2222-2222-222222222222',
+     '33333333-3333-3333-3333-333333333333'
+   );
+  if n <> 3 then
+    raise exception 'expected 3 auto-created profiles for the fixtures, got %', n;
   end if;
 end $$;
 

@@ -214,7 +214,9 @@ export type Database = {
           exif: Json | null
           id: string
           image_path: string
+          latitude: number | null
           location: string | null
+          longitude: number | null
           luminance: number | null
           position: number
           selfie_path: string | null
@@ -230,7 +232,9 @@ export type Database = {
           exif?: Json | null
           id?: string
           image_path: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           luminance?: number | null
           position: number
           selfie_path?: string | null
@@ -246,7 +250,9 @@ export type Database = {
           exif?: Json | null
           id?: string
           image_path?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           luminance?: number | null
           position?: number
           selfie_path?: string | null
@@ -437,7 +443,9 @@ export type Database = {
           p_description?: string
           p_exif?: Json
           p_image_path: string
+          p_latitude?: number
           p_location?: string
+          p_longitude?: number
           p_luminance?: number
           p_selfie_path?: string
           p_taken_at?: string
@@ -452,7 +460,9 @@ export type Database = {
           exif: Json | null
           id: string
           image_path: string
+          latitude: number | null
           location: string | null
+          longitude: number | null
           luminance: number | null
           position: number
           selfie_path: string | null
