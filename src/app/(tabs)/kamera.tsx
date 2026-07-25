@@ -350,15 +350,20 @@ export default function CameraScreen() {
               </View>
             ) : null}
 
-            <Text className={`text-sm ${busy ? 'text-ink' : 'text-muted'}`}>
-              {stage === 'back'
-                ? 'Tar bildet…'
-                : stage === 'selfie'
-                  ? 'Selfie om litt…'
-                  : ready
-                    ? 'Ett trykk tar begge bildene'
-                    : 'Starter kameraet…'}
-            </Text>
+            {/* On a pill, because this sits over the live preview: grey text
+                on whatever the camera happens to be pointed at is legible
+                against a dark room and invisible against a bright sky. */}
+            <View className="rounded-full bg-overlay px-3 py-1.5">
+              <Text className={`text-sm ${busy ? 'text-ink' : 'text-ink opacity-80'}`}>
+                {stage === 'back'
+                  ? 'Tar bildet…'
+                  : stage === 'selfie'
+                    ? 'Selfie om litt…'
+                    : ready
+                      ? 'Ett trykk tar begge bildene'
+                      : 'Starter kameraet…'}
+              </Text>
+            </View>
 
             {error ? (
               <Text className="px-8 text-center text-sm text-alert">{error}</Text>
