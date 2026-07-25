@@ -185,13 +185,19 @@ export default function FriendsScreen() {
 
             return (
               <View className="mb-2 flex-row items-center gap-3 rounded-tile bg-glass p-3">
-                <Avatar url={profile.avatar_url} />
-                <View className="flex-1">
-                  <Text className="text-base text-ink">
-                    {profile.display_name ?? profile.username}
-                  </Text>
-                  <Text className="text-xs text-muted">@{profile.username}</Text>
-                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Se profilen til ${profile.username}`}
+                  onPress={() => router.push(`/profil/${profile.id}`)}
+                  className="flex-1 flex-row items-center gap-3 active:opacity-70">
+                  <Avatar url={profile.avatar_url} />
+                  <View className="flex-1">
+                    <Text className="text-base text-ink">
+                      {profile.display_name ?? profile.username}
+                    </Text>
+                    <Text className="text-xs text-muted">@{profile.username}</Text>
+                  </View>
+                </Pressable>
 
                 {busy ? (
                   <ActivityIndicator color="#ffffff" />
