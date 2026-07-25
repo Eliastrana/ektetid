@@ -1,16 +1,9 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/screen';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { errorMessage } from '@/lib/errors';
 
 import {
@@ -174,6 +167,20 @@ export default function SignInScreen() {
 
             <Text className="mt-4 text-center text-xs text-muted">
               Bildene dine deles bare med vennene du selv godkjenner.
+            </Text>
+
+            {/* Guideline 1.2: the user has to be able to read what they are
+                agreeing to before they sign in, not after. */}
+            <Text className="mt-2 text-center text-xs text-muted">
+              Ved å logge inn godtar du{' '}
+              <Text className="text-ink underline" onPress={() => void Linking.openURL(TERMS_URL)}>
+                vilkårene
+              </Text>{' '}
+              og{' '}
+              <Text className="text-ink underline" onPress={() => void Linking.openURL(PRIVACY_URL)}>
+                personvernerklæringen
+              </Text>
+              .
             </Text>
           </View>
         </Screen>

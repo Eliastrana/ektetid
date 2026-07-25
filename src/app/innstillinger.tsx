@@ -2,11 +2,12 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { signOut } from '@/lib/auth';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { deleteAccount } from '@/lib/moderation';
 
 export default function SettingsScreen() {
@@ -100,6 +101,21 @@ export default function SettingsScreen() {
             className="h-14 items-center justify-center rounded-tile bg-glass active:bg-glass-strong">
             <Text className="text-base text-ink">Logg ut</Text>
           </Pressable>
+
+          {/* Reachable after sign-in too, not only on the sign-in screen —
+              agreeing once should not mean never being able to read it again. */}
+          <View className="mt-3 flex-row justify-center gap-5">
+            <Text
+              className="text-xs text-muted underline"
+              onPress={() => void Linking.openURL(TERMS_URL)}>
+              Vilkår
+            </Text>
+            <Text
+              className="text-xs text-muted underline"
+              onPress={() => void Linking.openURL(PRIVACY_URL)}>
+              Personvern
+            </Text>
+          </View>
 
           <Pressable
             accessibilityRole="button"
