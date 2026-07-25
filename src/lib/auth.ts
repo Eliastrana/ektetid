@@ -80,6 +80,16 @@ export async function signInWithApple(): Promise<void> {
 /**
  * Sign in with Google through the system browser.
  *
+ * Currently unused — the button was removed. Apple and email codes already
+ * cover every user on an iOS-only app, and a half-configured provider that
+ * errors on tap is worse than one that is not offered. Kept because it becomes
+ * worth having the moment there is an Android build, and because the awkward
+ * part is this exchange rather than the button.
+ *
+ * Re-enabling needs a Google Cloud OAuth client (Web application type) with
+ * Supabase's callback registered, its id and secret in the Supabase dashboard,
+ * and `ektetid://**` on the redirect allow-list.
+ *
  * Uses PKCE: Supabase hands back a one-time code on the redirect, which is
  * exchanged for a session here. No client secret ever reaches the device.
  */

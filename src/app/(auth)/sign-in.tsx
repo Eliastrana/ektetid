@@ -18,11 +18,10 @@ import {
   isAppleSignInAvailable,
   sendEmailCode,
   signInWithApple,
-  signInWithGoogle,
   verifyEmailCode,
 } from '@/lib/auth';
 
-type Busy = 'apple' | 'google' | 'email' | null;
+type Busy = 'apple' | 'email' | null;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -131,18 +130,6 @@ export default function SignInScreen() {
                     onPress={() => run('apple', signInWithApple)}
                   />
                 ) : null}
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={busy !== null}
-                  onPress={() => run('google', signInWithGoogle)}
-                  className="h-[54px] flex-row items-center justify-center rounded-tile bg-glass active:bg-glass-strong">
-                  {busy === 'google' ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <Text className="text-base text-ink">Fortsett med Google</Text>
-                  )}
-                </Pressable>
 
                 <View className="my-2 flex-row items-center gap-3">
                   <View className="h-px flex-1 bg-glass-border" />
