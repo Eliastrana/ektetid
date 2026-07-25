@@ -8,6 +8,8 @@ import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { Segmented } from '@/components/segmented';
 import { fetchLocatedPosts, regionFor, type LocatedPost, type MapFilter } from '@/lib/map';
+import { loadPinIcons } from '@/lib/map-pins';
+import type { ImageRef } from 'expo-image';
 
 const FILTERS: { value: MapFilter; label: string }[] = [
   { value: 'all', label: 'Alle' },
@@ -22,10 +24,16 @@ export default function MapScreen() {
   const [posts, setPosts] = useState<LocatedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LocatedPost | null>(null);
+  const [icons, setIcons] = useState<Map<string, ImageRef>>(new Map());
 
   const load = useCallback(async () => {
     try {
-      setPosts(await fetchLocatedPosts(filter, selfId));
+      const located = await fetchLocatedPosts(filter, selfId);
+      setPosts(located);
+      // Pins render immediately without photos, then gain them. Waiting on
+      // sixty image decodes before drawing anything would leave the map blank
+      // for as long as the slowest one takes.
+      void loadPinIcons(located).then(setIcons);
     } catch {
       // Leave whatever is on screen; the map is not worth an error state of
       // its own when the feed will already have surfaced a connection problem.
@@ -42,15 +50,27 @@ export default function MapScreen() {
 
   const region = useMemo(() => regionFor(posts), [posts]);
 
-  const markers = useMemo(
+  /**
+   * Annotations rather than markers, because only annotations take a custom
+   * icon — a marker is limited to an SF Symbol or a monogram.
+   *
+   * Posts whose thumbnail has not loaded, or that fall past the photo cap,
+   * still get an annotation; they simply show the camera glyph instead.
+   */
+  const annotations = useMemo(
     () =>
-      posts.map((post) => ({
-        id: post.id,
-        coordinates: { latitude: post.latitude, longitude: post.longitude },
-        title: post.title ?? post.location ?? 'Øyeblikk',
-        tintColor: '#ffffff',
-      })),
-    [posts]
+      posts.map((post) => {
+        const icon = icons.get(post.id);
+        return {
+          id: post.id,
+          coordinates: { latitude: post.latitude, longitude: post.longitude },
+          title: post.title ?? post.location ?? 'Øyeblikk',
+          backgroundColor: '#000000',
+          tintColor: '#ffffff',
+          ...(icon ? { icon } : { systemImage: 'camera.fill' }),
+        };
+      }),
+    [icons, posts]
   );
 
   // expo-maps has no map on the simulator and no Apple Maps on Android.
@@ -73,11 +93,15 @@ export default function MapScreen() {
             coordinates: { latitude: region.latitude, longitude: region.longitude },
             zoom: zoomFor(region.latitudeDelta),
           }}
-          markers={markers}
+          annotations={annotations}
           uiSettings={{ compassEnabled: false, scaleBarEnabled: false }}
           properties={{ isMyLocationEnabled: true }}
           onMarkerClick={(marker) => {
             const match = posts.find((post) => post.id === marker.id);
+            setSelected(match ?? null);
+          }}
+          onAnnotationClick={(annotation) => {
+            const match = posts.find((post) => post.id === annotation.id);
             setSelected(match ?? null);
           }}
         />
