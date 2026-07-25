@@ -22,6 +22,19 @@ import { setPendingCapture } from '@/lib/pending-capture';
  */
 const LENS_SETTLE_MS = 900;
 
+/**
+ * Back lenses we offer, in the order they appear on the zoom control.
+ *
+ * These are AVCaptureDevice identifiers. Telephoto is deliberately left out:
+ * its magnification varies by model — 2x on some iPhones, 5x on others — so
+ * there is no honest fixed label for it, and mislabelling a zoom level is
+ * worse than not offering it.
+ */
+const BACK_LENSES: { id: string; label: string }[] = [
+  { id: 'builtInUltraWideCamera', label: '0,5' },
+  { id: 'builtInWideAngleCamera', label: '1' },
+];
+
 export default function CameraScreen() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
@@ -33,6 +46,16 @@ export default function CameraScreen() {
   const [preview, setPreview] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Lens selection is iOS-only; on Android onAvailableLensesChanged never
+  // fires, so the control simply never appears.
+  const [availableLenses, setAvailableLenses] = useState<string[]>([]);
+  const [backLens, setBackLens] = useState('builtInWideAngleCamera');
+
+  // Only the back camera has an ultra-wide, so the control is hidden while the
+  // front one is active — including mid-capture, when we flip for the selfie.
+  const zoomOptions =
+    facing === 'back' ? BACK_LENSES.filter((lens) => availableLenses.includes(lens.id)) : [];
 
   const capturePair = useCallback(async () => {
     if (stage !== 'idle') return;
@@ -150,6 +173,13 @@ export default function CameraScreen() {
         flash={flash}
         mode="picture"
         animateShutter={false}
+        // Passing a back-camera lens while the front is active would ask for a
+        // device that does not exist on this side.
+        selectedLens={facing === 'back' ? backLens : undefined}
+        onAvailableLensesChanged={({ lenses }) => {
+          console.log('[kamera] lenses:', lenses.join(', '));
+          setAvailableLenses(lenses);
+        }}
         onCameraReady={() => {
           console.log('[kamera] camera ready, facing:', facing);
           setReady(true);
@@ -199,6 +229,35 @@ export default function CameraScreen() {
           ) : null}
 
           <View className="items-center gap-5 pb-6">
+            {/* Lens picker. Only rendered when the device actually reports an
+                ultra-wide, so single-lens iPhones and Android see nothing. */}
+            {zoomOptions.length > 1 && !busy ? (
+              <View className="flex-row items-center gap-1 rounded-full border border-glass-border bg-glass p-1">
+                {zoomOptions.map((lens) => {
+                  const selected = lens.id === backLens;
+                  return (
+                    <Pressable
+                      key={lens.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`${lens.label} ganger zoom`}
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        setBackLens(lens.id);
+                      }}
+                      className={`h-9 min-w-9 items-center justify-center rounded-full px-3 ${
+                        selected ? 'bg-ink' : ''
+                      }`}>
+                      <Text
+                        className={`text-sm ${selected ? 'text-canvas' : 'text-ink opacity-80'}`}>
+                        {lens.label}×
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
             <Text className={`text-sm ${busy ? 'text-ink' : 'text-muted'}`}>
               {stage === 'back'
                 ? 'Tar bildet…'
