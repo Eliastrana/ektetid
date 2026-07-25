@@ -1,3 +1,30 @@
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/preflight.css' layer(base);
+@import 'tailwindcss/utilities.css';
+@import 'nativewind/theme';
+
+/*
+ * EkteTid design tokens, carried over from the original web app: near-black
+ * canvas, white ink, and translucent white "glass" panels floating over
+ * full-bleed photography.
+ */
+@theme {
+  --color-canvas: #000000;
+  --color-ink: #ffffff;
+  --color-muted: #b0b4ba;
+  --color-surface: #212225;
+  --color-surface-raised: #2e3135;
+
+  --color-glass: rgb(255 255 255 / 0.2);
+  --color-glass-strong: rgb(255 255 255 / 0.3);
+  --color-glass-border: rgb(255 255 255 / 0.25);
+
+  --color-alert: #ff3b30;
+
+  --radius-glass: 10px;
+  --radius-tile: 12px;
+}
+
 :root {
   --font-display:
     Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
