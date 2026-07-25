@@ -8,7 +8,7 @@ import Animated, {
   LinearTransition,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 
 import type { AlbumPost } from '@/lib/album';
@@ -27,21 +27,18 @@ const MONTHS = [
 const SELFIE_COLLAPSED = { width: 60, height: 80 };
 const SELFIE_EXPANDED = { width: 132, height: 176 };
 
-/**
- * The selfie springs — it reads as a physical thing changing size.
- *
- * Text does not. A spring overshoots, and overshoot on a block of prose looks
- * like the layout is unstable rather than lively, so the reflow is a plain
- * ease-out instead.
- */
 /*
- * Overdamped on purpose. A spring overshoots whenever damping falls below
- * 2 * sqrt(stiffness * mass) — here that threshold is 23.9, so 30 settles
- * without ever crossing its target. It keeps the weighted feel of a spring
- * while removing the bounce entirely.
+ * No spring anywhere. Even a heavily overdamped spring keeps a spring's
+ * character — it decelerates asymptotically and never quite looks finished.
+ * A timed ease-out starts immediately, slows into place and stops.
+ *
+ * The selfie and the surrounding text share one duration and curve, so the
+ * whole tile reads as a single movement rather than two things resizing near
+ * each other.
  */
-const SPRING = { damping: 30, stiffness: 190, mass: 0.75 } as const;
-const REFLOW = LinearTransition.duration(240).easing(Easing.out(Easing.quad));
+const DURATION = 260;
+const EASING = Easing.out(Easing.cubic);
+const REFLOW = LinearTransition.duration(DURATION).easing(EASING);
 
 function formatNorwegianDate(iso: string): string {
   const date = new Date(iso);
@@ -51,9 +48,9 @@ function formatNorwegianDate(iso: string): string {
 /**
  * Title, date, place and description, reading directly off the photo.
  *
- * Expanding animates rather than jumping: the selfie springs between its two
- * sizes, the description fades in, and the surrounding text reflows through a
- * layout transition so nothing snaps into place around it.
+ * Expanding animates rather than jumping: the selfie eases between its two
+ * sizes, the description fades in, and the surrounding text reflows on the
+ * same curve so nothing snaps into place around it.
  *
  * Text is always white here — the scrim guarantees a dark backdrop, so the
  * per-post luminance is not needed to choose a colour.
@@ -63,7 +60,7 @@ export function PostTile({ post, expanded, onToggle }: Props) {
   const progress = useSharedValue(expanded ? 1 : 0);
 
   useEffect(() => {
-    progress.value = withSpring(expanded ? 1 : 0, SPRING);
+    progress.value = withTiming(expanded ? 1 : 0, { duration: DURATION, easing: EASING });
   }, [expanded, progress]);
 
   const selfieStyle = useAnimatedStyle(() => ({
