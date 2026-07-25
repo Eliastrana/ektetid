@@ -253,6 +253,24 @@ export default function EditAlbumScreen() {
                 </View>
               ))}
 
+              {/* With no friends there is nobody to share with, and rendering
+                  nothing leaves the user hunting for a button that cannot
+                  exist. Say why, and point at the fix. */}
+              {album.isOwner && friends.length === 0 && album.members.length === 0 ? (
+                <View className="rounded-tile bg-glass p-4">
+                  <Text className="text-base text-ink">Ingen å dele med ennå</Text>
+                  <Text className="mt-1 text-sm text-muted">
+                    Du kan bare dele album med venner. Legg til noen først.
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => router.push('/venner')}
+                    className="mt-3 h-12 items-center justify-center rounded-tile bg-ink active:opacity-80">
+                    <Text className="text-base text-canvas">Finn venner</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
               {album.isOwner && friends.length > 0 ? (
                 <>
                   <Text className="mb-2 mt-2 text-xs text-muted">Legg til en venn</Text>
