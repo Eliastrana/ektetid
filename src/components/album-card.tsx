@@ -43,6 +43,7 @@ export function AlbumCard({
   const unseen = isOwn ? 0 : (album.unseen_count ?? 0);
   const count = album.post_count ?? 0;
   const owner = album.owner_display_name ?? album.owner_username ?? '';
+  const avatar = wide ? 24 : 18;
 
   return (
     <Pressable
@@ -56,13 +57,9 @@ export function AlbumCard({
       // is odd, which makes it enormous.
       style={wide ? undefined : { maxWidth: '50%' }}
       className="flex-1 active:opacity-90">
-      <View
-        ref={cardRef}
-        className={`overflow-hidden rounded-tile bg-surface ${
-          // A full-width card at 3:4 would be taller than the screen, so the
-          // single-column layout uses a landscape crop instead.
-          wide ? 'aspect-[4/3]' : 'aspect-[3/4]'
-        }`}>
+      {/* One shape at both sizes, so switching layout rezooms the same photo
+          rather than recomposing it. */}
+      <View ref={cardRef} className="aspect-[3/4] overflow-hidden rounded-tile bg-surface">
         {album.coverUrl ? (
           <Image
             source={{ uri: album.coverUrl }}
@@ -79,7 +76,9 @@ export function AlbumCard({
 
         {album.coverUrl ? <Scrim /> : null}
 
-        <View className="absolute inset-x-3 bottom-3">
+        {/* More breathing room at full width — the same 12pt inset that reads
+            as generous on a half-width card looks cramped on a large one. */}
+        <View className={wide ? 'absolute inset-x-5 bottom-5' : 'absolute inset-x-3 bottom-3'}>
           {/*
             Who the album belongs to, and what your relationship to it is.
 
@@ -93,16 +92,20 @@ export function AlbumCard({
               {album.owner_avatar_url ? (
                 <Image
                   source={{ uri: album.owner_avatar_url }}
-                  style={{ width: 18, height: 18, borderRadius: 9 }}
+                  style={{ width: avatar, height: avatar, borderRadius: avatar / 2 }}
                 />
               ) : (
-                <View className="h-[18px] w-[18px] items-center justify-center rounded-full bg-glass-strong">
-                  <Text className="text-[9px] text-ink">
+                <View
+                  className="items-center justify-center rounded-full bg-glass-strong"
+                  style={{ width: avatar, height: avatar }}>
+                  <Text className={`text-ink ${wide ? 'text-[11px]' : 'text-[9px]'}`}>
                     {owner.trim().charAt(0).toUpperCase()}
                   </Text>
                 </View>
               )}
-              <Text numberOfLines={1} className="flex-1 text-xs text-ink opacity-85">
+              <Text
+                numberOfLines={1}
+                className={`flex-1 text-ink opacity-85 ${wide ? 'text-sm' : 'text-xs'}`}>
                 {isOwn ? 'Ditt album' : owner}
               </Text>
               {album.shared && !isOwn ? (
@@ -113,21 +116,23 @@ export function AlbumCard({
                     tintColor="#ffffff"
                     fallback={<Text className="text-[9px] text-ink">··</Text>}
                   />
-                  <Text className="text-[9px] text-ink">Delt</Text>
+                  <Text className={`text-ink ${wide ? 'text-[11px]' : 'text-[9px]'}`}>Delt</Text>
                 </View>
               ) : null}
             </View>
           ) : null}
 
           <View className="flex-row items-end justify-between gap-2">
-            <Text numberOfLines={1} className="flex-1 text-base text-ink">
+            <Text numberOfLines={1} className={`flex-1 text-ink ${wide ? 'text-2xl' : 'text-base'}`}>
               {album.title}
             </Text>
-            <Text className="text-xs text-ink opacity-70">{count}</Text>
+            <Text className={`text-ink opacity-70 ${wide ? 'text-base' : 'text-xs'}`}>{count}</Text>
           </View>
 
           {album.description ? (
-            <Text numberOfLines={1} className="mt-0.5 text-xs text-ink opacity-70">
+            <Text
+              numberOfLines={wide ? 2 : 1}
+              className={`mt-0.5 text-ink opacity-70 ${wide ? 'text-sm' : 'text-xs'}`}>
               {album.description}
             </Text>
           ) : null}
