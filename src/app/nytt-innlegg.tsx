@@ -191,9 +191,7 @@ export default function NewPostScreen() {
                       setAlbumId(album.id);
                       setNewAlbumTitle('');
                     }}
-                    className={`rounded-full border px-4 py-2 ${
-                      selected ? 'border-ink bg-ink' : 'border-glass-border bg-glass'
-                    }`}>
+                    className={`rounded-full px-4 py-2 ${selected ? 'bg-ink' : 'bg-glass'}`}>
                     <Text className={selected ? 'text-canvas' : 'text-ink'}>{album.title}</Text>
                   </Pressable>
                 );
@@ -223,7 +221,7 @@ export default function NewPostScreen() {
               disabled={!canPublish}
               onPress={publish}
               className={`h-14 flex-row items-center justify-center gap-3 rounded-tile active:opacity-80 ${
-                canPublish ? 'bg-ink' : 'bg-surface'
+                canPublish ? 'bg-ink' : 'bg-surface-raised'
               }`}>
               {busy ? (
                 <>

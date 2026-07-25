@@ -95,7 +95,7 @@ export default function SignInScreen() {
                   disabled={code.trim().length < 6 || busy !== null}
                   onPress={() => run('email', () => verifyEmailCode(email, code))}
                   className={`h-14 items-center justify-center rounded-tile active:opacity-80 ${
-                    code.trim().length === 6 ? 'bg-ink' : 'bg-surface'
+                    code.trim().length === 6 ? 'bg-ink' : 'bg-surface-raised'
                   }`}>
                   {busy === 'email' ? (
                     <ActivityIndicator color="#000000" />
@@ -172,7 +172,7 @@ export default function SignInScreen() {
                     })
                   }
                   className={`h-14 items-center justify-center rounded-tile active:opacity-80 ${
-                    emailValid ? 'bg-ink' : 'bg-surface'
+                    emailValid ? 'bg-ink' : 'bg-surface-raised'
                   }`}>
                   {busy === 'email' ? (
                     <ActivityIndicator color="#000000" />

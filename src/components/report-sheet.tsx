@@ -61,7 +61,7 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
         <Pressable accessibilityRole="button" className="flex-1" onPress={onClose} />
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View className="rounded-t-3xl border-t border-glass-border bg-surface">
+          <View className="rounded-t-3xl bg-surface">
             <Screen className="px-5" edges={['bottom']}>
               <View className="flex-row items-center justify-between py-4">
                 <Text className="text-xl text-ink">Rapporter innhold</Text>
@@ -91,9 +91,7 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
                         void Haptics.selectionAsync();
                         setReason(option.value);
                       }}
-                      className={`rounded-full border px-4 py-2 ${
-                        selected ? 'border-ink bg-ink' : 'border-glass-border bg-glass'
-                      }`}>
+                      className={`rounded-full px-4 py-2 ${selected ? 'bg-ink' : 'bg-glass'}`}>
                       <Text className={selected ? 'text-canvas' : 'text-ink'}>
                         {option.label}
                       </Text>
@@ -122,9 +120,7 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
                 }}
                 className="mt-4 flex-row items-center gap-3">
                 <View
-                  className={`h-6 w-6 items-center justify-center rounded-md border ${
-                    alsoBlock ? 'border-ink bg-ink' : 'border-glass-border'
-                  }`}>
+                  className={`h-6 w-6 items-center justify-center rounded-md ${alsoBlock ? 'bg-ink' : 'bg-glass-strong'}`}>
                   {alsoBlock ? (
                     <SymbolView
                       name="checkmark"

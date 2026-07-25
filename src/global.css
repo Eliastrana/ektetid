@@ -12,8 +12,10 @@
   --color-canvas: #000000;
   --color-ink: #ffffff;
   --color-muted: #b0b4ba;
-  --color-surface: #212225;
-  --color-surface-raised: #2e3135;
+  /* Opaque panels: sheets, and the placeholder behind a loading cover. */
+  --color-surface: #121214;
+  /* A quiet but visible fill: disabled buttons, avatar placeholders. */
+  --color-surface-raised: #1e1f22;
 
   /*
    * Surfaces on the near-black canvas: a faint lift rather than a panel.

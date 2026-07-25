@@ -78,7 +78,7 @@ export default function ChooseUsernameScreen() {
           disabled={!valid || busy}
           onPress={submit}
           className={`h-14 flex-row items-center justify-center rounded-tile active:opacity-80 ${
-            valid ? 'bg-ink' : 'bg-surface'
+            valid ? 'bg-ink' : 'bg-surface-raised'
           }`}>
           {busy ? (
             <ActivityIndicator color="#000000" />

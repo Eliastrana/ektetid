@@ -89,7 +89,7 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
         <Pressable accessibilityRole="button" className="flex-1" onPress={onClose} />
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View className="max-h-[70vh] min-h-[45vh] rounded-t-3xl border-t border-glass-border bg-surface">
+          <View className="max-h-[70vh] min-h-[45vh] rounded-t-3xl bg-surface">
             <Screen className="flex-1" edges={['bottom']}>
               <View className="flex-row items-center justify-between px-5 py-4">
                 <Text className="text-xl text-ink">Kommentarer</Text>
