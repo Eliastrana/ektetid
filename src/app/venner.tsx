@@ -1,0 +1,240 @@
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
+
+import { useAuth } from '@/components/auth-provider';
+import { Screen } from '@/components/screen';
+import type { Profile } from '@/lib/database.types';
+import {
+  acceptFriendRequest,
+  listFriendships,
+  removeFriendship,
+  searchProfiles,
+  sendFriendRequest,
+  type FriendRequest,
+} from '@/lib/friends';
+
+type Row =
+  | { kind: 'header'; title: string }
+  | { kind: 'friendship'; item: FriendRequest }
+  | { kind: 'result'; item: Profile };
+
+function Avatar({ url }: { url: string | null }) {
+  if (!url) {
+    return <View className="h-11 w-11 rounded-full bg-surface-raised" />;
+  }
+  return (
+    <Image source={{ uri: url }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+  );
+}
+
+export default function FriendsScreen() {
+  const router = useRouter();
+  const { session } = useAuth();
+  const selfId = session?.user.id;
+
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Profile[]>([]);
+  const [friendships, setFriendships] = useState<FriendRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!selfId) return;
+    try {
+      setFriendships(await listFriendships(selfId));
+      setError(null);
+    } catch {
+      setError('Klarte ikke å hente vennene dine.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selfId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Debounced so a fast typist does not fire a query per keystroke.
+  useEffect(() => {
+    if (!selfId) return;
+    const term = query.trim();
+    if (term.length < 2) {
+      setResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void searchProfiles(term, selfId)
+        .then(setResults)
+        .catch(() => setResults([]));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query, selfId]);
+
+  const act = useCallback(
+    async (id: string, fn: () => Promise<void>) => {
+      setBusyId(id);
+      setError(null);
+      try {
+        await fn();
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await load();
+      } catch {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setError('Noe gikk galt. Prøv igjen.');
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [load]
+  );
+
+  if (!selfId) return null;
+
+  const incoming = friendships.filter((f) => !f.outgoing && f.status === 'pending');
+  const outgoing = friendships.filter((f) => f.outgoing && f.status === 'pending');
+  const accepted = friendships.filter((f) => f.status === 'accepted');
+  const knownIds = new Set(friendships.map((f) => f.profile.id));
+
+  const rows: Row[] = [];
+  if (results.length) {
+    rows.push({ kind: 'header', title: 'Søkeresultat' });
+    results.forEach((item) => rows.push({ kind: 'result', item }));
+  }
+  if (incoming.length) {
+    rows.push({ kind: 'header', title: 'Vil bli venn med deg' });
+    incoming.forEach((item) => rows.push({ kind: 'friendship', item }));
+  }
+  if (accepted.length) {
+    rows.push({ kind: 'header', title: `Venner (${accepted.length})` });
+    accepted.forEach((item) => rows.push({ kind: 'friendship', item }));
+  }
+  if (outgoing.length) {
+    rows.push({ kind: 'header', title: 'Forespørsler sendt' });
+    outgoing.forEach((item) => rows.push({ kind: 'friendship', item }));
+  }
+
+  return (
+    <View className="flex-1 bg-canvas">
+      <Screen className="flex-1" edges={['top', 'bottom']}>
+        <View className="flex-row items-center gap-3 px-5 pt-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tilbake"
+            onPress={() => router.back()}
+            className="h-10 w-10 items-center justify-center rounded-full border border-glass-border bg-glass">
+            <Text className="text-lg text-ink">‹</Text>
+          </Pressable>
+          <Text className="text-3xl text-ink">Venner</Text>
+        </View>
+
+        <View className="px-5 pt-4">
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="Søk etter brukernavn"
+            placeholderTextColor="#6b6f76"
+            selectionColor="#ffffff"
+            className="h-12 rounded-tile border border-glass-border bg-glass px-4 text-base text-ink"
+          />
+          {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
+        </View>
+
+        <FlatList
+          data={rows}
+          keyExtractor={(row, i) => {
+            if (row.kind === 'header') return `h-${row.title}-${i}`;
+            const id = row.kind === 'result' ? row.item.id : row.item.profile.id;
+            return `${row.kind}-${id}`;
+          }}
+          contentContainerClassName="px-5 pb-8 pt-2"
+          ListEmptyComponent={
+            loading ? (
+              <View className="items-center py-16">
+                <ActivityIndicator color="#ffffff" />
+              </View>
+            ) : (
+              <View className="items-center gap-2 py-16">
+                <Text className="text-base text-ink">Ingen venner ennå</Text>
+                <Text className="text-center text-sm text-muted">
+                  Søk etter brukernavnet til noen du kjenner.
+                </Text>
+              </View>
+            )
+          }
+          renderItem={({ item: row }) => {
+            if (row.kind === 'header') {
+              return (
+                <Text className="mb-2 mt-5 text-sm text-muted">{row.title}</Text>
+              );
+            }
+
+            const profile = row.kind === 'result' ? row.item : row.item.profile;
+            const busy = busyId === profile.id;
+
+            return (
+              <View className="mb-2 flex-row items-center gap-3 rounded-tile border border-glass-border bg-glass p-3">
+                <Avatar url={profile.avatar_url} />
+                <View className="flex-1">
+                  <Text className="text-base text-ink">
+                    {profile.display_name ?? profile.username}
+                  </Text>
+                  <Text className="text-xs text-muted">@{profile.username}</Text>
+                </View>
+
+                {busy ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : row.kind === 'result' ? (
+                  knownIds.has(profile.id) ? (
+                    <Text className="text-xs text-muted">Sendt</Text>
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        act(profile.id, () => sendFriendRequest(selfId, profile.id))
+                      }
+                      className="rounded-full bg-ink px-4 py-2 active:opacity-80">
+                      <Text className="text-sm text-canvas">Legg til</Text>
+                    </Pressable>
+                  )
+                ) : row.item.status === 'pending' && !row.item.outgoing ? (
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        act(profile.id, () => acceptFriendRequest(profile.id, selfId))
+                      }
+                      className="rounded-full bg-ink px-4 py-2 active:opacity-80">
+                      <Text className="text-sm text-canvas">Godta</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => act(profile.id, () => removeFriendship(selfId, profile.id))}
+                      className="rounded-full border border-glass-border px-4 py-2 active:opacity-70">
+                      <Text className="text-sm text-ink">Avslå</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Fjern ${profile.username}`}
+                    onPress={() => act(profile.id, () => removeFriendship(selfId, profile.id))}
+                    className="rounded-full border border-glass-border px-4 py-2 active:opacity-70">
+                    <Text className="text-sm text-muted">
+                      {row.item.status === 'pending' ? 'Avbryt' : 'Fjern'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          }}
+        />
+      </Screen>
+    </View>
+  );
+}
