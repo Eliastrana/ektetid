@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -69,7 +70,12 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
                   accessibilityLabel="Lukk"
                   onPress={onClose}
                   className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-                  <Text className="text-base text-ink">✕</Text>
+                  <SymbolView
+                    name="xmark"
+                    size={15}
+                    tintColor="#ffffff"
+                    fallback={<Text className="text-base text-ink">✕</Text>}
+                  />
                 </Pressable>
               </View>
 
@@ -119,7 +125,14 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
                   className={`h-6 w-6 items-center justify-center rounded-md border ${
                     alsoBlock ? 'border-ink bg-ink' : 'border-glass-border'
                   }`}>
-                  {alsoBlock ? <Text className="text-sm text-canvas">✓</Text> : null}
+                  {alsoBlock ? (
+                    <SymbolView
+                      name="checkmark"
+                      size={14}
+                      tintColor="#000000"
+                      fallback={<Text className="text-sm text-canvas">✓</Text>}
+                    />
+                  ) : null}
                 </View>
                 <Text className="flex-1 text-sm text-ink">
                   Blokker denne personen også

@@ -68,7 +68,7 @@ export default function ProfileScreen() {
           data={albums}
           keyExtractor={(album) => album.id!}
           numColumns={2}
-          contentContainerClassName="px-5 pb-8 gap-3"
+          contentContainerClassName="px-5 pb-32 gap-3"
           columnWrapperClassName="gap-3"
           refreshControl={
             <RefreshControl

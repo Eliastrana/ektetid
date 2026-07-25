@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
 
+import { Scrim } from '@/components/scrim';
 import type { FeedAlbum } from '@/lib/feed';
 
 type Props = {
@@ -9,8 +10,9 @@ type Props = {
 };
 
 /**
- * The album cover from the original grid: a tall photo with a frosted info bar
- * floating over the bottom, and a red badge counting posts you have not seen.
+ * The album cover from the original grid: a tall photo with its title reading
+ * straight off the image, over a bottom dim, and a red badge counting posts
+ * you have not seen.
  */
 export function AlbumCard({ album, onPress }: Props) {
   const unseen = album.unseen_count ?? 0;
@@ -21,6 +23,10 @@ export function AlbumCard({ album, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${album.title}, ${count} bilder${unseen > 0 ? `, ${unseen} nye` : ''}`}
       onPress={onPress}
+      // maxWidth caps a lone card at half the row. With numColumns={2}, flex-1
+      // otherwise stretches the last item across the full width when the count
+      // is odd, which makes it enormous.
+      style={{ maxWidth: '50%' }}
       className="flex-1 active:opacity-90">
       <View className="aspect-[3/4] overflow-hidden rounded-tile bg-surface">
         {album.coverUrl ? (
@@ -37,15 +43,17 @@ export function AlbumCard({ album, onPress }: Props) {
           </View>
         )}
 
-        <View className="absolute inset-x-2 bottom-2 rounded-glass border border-glass-border bg-glass p-3">
-          <View className="flex-row items-center justify-between gap-2">
+        {album.coverUrl ? <Scrim /> : null}
+
+        <View className="absolute inset-x-3 bottom-3">
+          <View className="flex-row items-end justify-between gap-2">
             <Text numberOfLines={1} className="flex-1 text-base text-ink">
               {album.title}
             </Text>
-            <Text className="text-xs text-ink opacity-80">{count}</Text>
+            <Text className="text-xs text-ink opacity-70">{count}</Text>
           </View>
           {album.description ? (
-            <Text numberOfLines={1} className="mt-1 text-xs text-ink opacity-80">
+            <Text numberOfLines={1} className="mt-0.5 text-xs text-ink opacity-70">
               {album.description}
             </Text>
           ) : null}

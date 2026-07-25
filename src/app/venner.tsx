@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
@@ -126,7 +127,12 @@ export default function FriendsScreen() {
             accessibilityLabel="Tilbake"
             onPress={() => router.back()}
             className="h-10 w-10 items-center justify-center rounded-full border border-glass-border bg-glass">
-            <Text className="text-lg text-ink">‹</Text>
+            <SymbolView
+              name="chevron.left"
+              size={18}
+              tintColor="#ffffff"
+              fallback={<Text className="text-lg text-ink">‹</Text>}
+            />
           </Pressable>
           <Text className="text-3xl text-ink">Venner</Text>
         </View>

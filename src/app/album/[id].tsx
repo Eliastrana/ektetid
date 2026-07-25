@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Pressable, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -16,6 +17,7 @@ import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
 import { ReportSheet } from '@/components/report-sheet';
 import { PostTile } from '@/components/post-tile';
+import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
 import { StoryProgress } from '@/components/story-progress';
 import { fetchAlbum, markAlbumRead, type AlbumDetail } from '@/lib/album';
@@ -292,6 +294,8 @@ export default function AlbumScreen() {
         </Animated.View>
       </GestureDetector>
 
+      <Scrim height={0.45} />
+
       <Screen className="absolute inset-0" pointerEvents="box-none">
         <Animated.View style={chromeStyle} pointerEvents="box-none" className="px-4 pt-2">
           <StoryProgress count={posts.length} index={index} />
@@ -301,7 +305,12 @@ export default function AlbumScreen() {
               accessibilityLabel="Lukk album"
               onPress={dismiss}
               className="h-11 w-11 items-center justify-center rounded-full border border-glass-border bg-glass">
-              <Text className="text-lg text-ink">✕</Text>
+              <SymbolView
+                name="xmark"
+                size={17}
+                tintColor="#ffffff"
+                fallback={<Text className="text-lg text-ink">✕</Text>}
+              />
             </Pressable>
             <Text numberOfLines={1} className="ml-3 flex-1 text-right text-base text-ink">
               {album.title}
@@ -326,8 +335,13 @@ export default function AlbumScreen() {
               accessibilityRole="button"
               accessibilityLabel={likes.likedByMe ? 'Fjern hjerte' : 'Gi hjerte'}
               onPress={onToggleLike}
-              className="h-14 flex-row items-center gap-2 rounded-full border border-glass-border bg-glass px-4 active:bg-glass-strong">
-              <Text className="text-xl">{likes.likedByMe ? '❤️' : '🤍'}</Text>
+              className="h-12 flex-row items-center gap-2 rounded-full px-2 active:opacity-60">
+              <SymbolView
+                name={likes.likedByMe ? 'heart.fill' : 'heart'}
+                size={24}
+                tintColor={likes.likedByMe ? '#ff3b30' : '#ffffff'}
+                fallback={<Text className="text-xl">{likes.likedByMe ? '❤️' : '🤍'}</Text>}
+              />
               {likes.count > 0 ? (
                 <Text className="text-base text-ink">{likes.count}</Text>
               ) : null}
@@ -340,8 +354,13 @@ export default function AlbumScreen() {
                 void Haptics.selectionAsync();
                 setShowComments(true);
               }}
-              className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
-              <Text className="text-xl">💬</Text>
+              className="h-12 w-12 items-center justify-center rounded-full active:opacity-60">
+              <SymbolView
+                name="bubble.left.fill"
+                size={22}
+                tintColor="#ffffff"
+                fallback={<Text className="text-xl">💬</Text>}
+              />
             </Pressable>
 
             {/* Reporting your own post is meaningless, so it is hidden there. */}
@@ -356,8 +375,13 @@ export default function AlbumScreen() {
                     postId: current.id,
                   });
                 }}
-                className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
-                <Text className="text-xl text-ink">⋯</Text>
+                className="h-12 w-12 items-center justify-center rounded-full active:opacity-60">
+                <SymbolView
+                  name="ellipsis"
+                  size={22}
+                  tintColor="#ffffff"
+                  fallback={<Text className="text-xl text-ink">⋯</Text>}
+                />
               </Pressable>
             ) : null}
           </Animated.View>

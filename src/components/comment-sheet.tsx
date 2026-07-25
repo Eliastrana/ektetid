@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -97,7 +98,12 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                   accessibilityLabel="Lukk"
                   onPress={onClose}
                   className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-                  <Text className="text-base text-ink">✕</Text>
+                  <SymbolView
+                    name="xmark"
+                    size={15}
+                    tintColor="#ffffff"
+                    fallback={<Text className="text-base text-ink">✕</Text>}
+                  />
                 </Pressable>
               </View>
 
@@ -172,7 +178,12 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                   {sending ? (
                     <ActivityIndicator color="#000000" />
                   ) : (
-                    <Text className="text-lg text-canvas">↑</Text>
+                    <SymbolView
+                      name="arrow.up"
+                      size={20}
+                      tintColor="#000000"
+                      fallback={<Text className="text-lg text-canvas">↑</Text>}
+                    />
                   )}
                 </Pressable>
               </View>
