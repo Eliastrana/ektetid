@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { AppleMaps } from 'expo-maps';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -7,6 +6,7 @@ import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { Segmented } from '@/components/segmented';
 import { fetchLocatedPosts, regionFor, type LocatedPost, type MapFilter } from '@/lib/map';
 
 const FILTERS: { value: MapFilter; label: string }[] = [
@@ -107,32 +107,16 @@ export default function MapScreen() {
             ) : null}
           </View>
 
-          <View className="flex-row items-center gap-1 rounded-full bg-overlay p-1">
-            {FILTERS.map((option) => {
-              const active = option.value === filter;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => {
-                    if (active) return;
-                    void Haptics.selectionAsync();
-                    // Clear the card: the selected pin may not survive the
-                    // filter change, and a card for a hidden pin is confusing.
-                    setSelected(null);
-                    setFilter(option.value);
-                  }}
-                  className={`h-9 items-center justify-center rounded-full px-4 ${
-                    active ? 'bg-ink' : ''
-                  }`}>
-                  <Text className={`text-sm ${active ? 'text-canvas' : 'text-ink opacity-80'}`}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Segmented
+            options={FILTERS}
+            value={filter}
+            onChange={(next) => {
+              // Clear the card: the selected pin may not survive the filter
+              // change, and a card for a hidden pin is confusing.
+              setSelected(null);
+              setFilter(next);
+            }}
+          />
         </View>
 
         <View className="flex-1" pointerEvents="none" />
