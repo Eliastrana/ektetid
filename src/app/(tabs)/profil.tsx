@@ -162,6 +162,7 @@ export default function ProfileScreen() {
             <AlbumCard
               album={item}
               isOwn
+              showOwner={false}
               onPress={(origin) =>
                 router.push({
                   pathname: '/album/[id]',
