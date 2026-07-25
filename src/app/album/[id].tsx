@@ -42,8 +42,8 @@ const COMMIT_RATIO = 0.28;
 /** Velocity that commits regardless of distance. */
 const COMMIT_VELOCITY = 550;
 
-/** Downward drag that dismisses the album. */
-const DISMISS_DISTANCE = 140;
+/** Downward drag that commits to dismissing. */
+const DISMISS_DISTANCE = 110;
 
 /** How long the album takes to grow out of, or shrink back into, its card. */
 const GENIE_MS = 300;
@@ -78,13 +78,26 @@ export default function AlbumScreen() {
   const { ox, oy, ow, oh } = params;
   const origin = useMemo(() => decodeOrigin({ ox, oy, ow, oh }), [ox, oy, ow, oh]);
   const genie = useSharedValue(origin ? 0 : 1);
+  /**
+   * How far through a dismiss drag we are, 0 to 1.
+   *
+   * Kept separate from `genie` so the drag can shrink and dim the album live —
+   * the close reads as already happening under your finger, rather than
+   * nothing until you let go.
+   */
+  const dragProgress = useSharedValue(0);
 
   const genieStyle = useAnimatedStyle(() => {
-    if (!origin) return { opacity: genie.value };
+    const dragScale = 1 - 0.18 * dragProgress.value;
+    const dragFade = 1 - 0.4 * dragProgress.value;
+    if (!origin) {
+      return { opacity: genie.value * dragFade, transform: [{ scale: dragScale }] };
+    }
     const startScale = origin.width / width;
+    const openScale = startScale + (1 - startScale) * genie.value;
     return {
-      opacity: 0.4 + 0.6 * genie.value,
-      transform: [{ scale: startScale + (1 - startScale) * genie.value }],
+      opacity: (0.4 + 0.6 * genie.value) * dragFade,
+      transform: [{ scale: openScale * dragScale }],
     };
   });
 
@@ -248,20 +261,26 @@ export default function AlbumScreen() {
       router.back();
       return;
     }
-    // Shrink back into the card first, then pop — otherwise the stack
-    // transition and the genie fight each other.
-    genie.value = withTiming(
-      0,
-      { duration: GENIE_MS - 40, easing: Easing.in(Easing.cubic) },
-      (finished) => {
-        if (finished) runOnJS(router.back)();
-      }
-    );
-  }, [genie, origin, router]);
+
+    const exit = { duration: GENIE_MS - 40, easing: Easing.in(Easing.cubic) } as const;
+
+    // Unwind the drag over the same interval as the shrink. Left alone, the
+    // drag's own scale and offset would still be applied at the end, so the
+    // album would land smaller than the card and below it.
+    dragProgress.value = withTiming(0, exit);
+    translateY.value = withTiming(0, exit);
+
+    // Shrink back into the card first, then pop — popping first would cut the
+    // animation off mid-flight.
+    genie.value = withTiming(0, exit, (finished) => {
+      if (finished) runOnJS(router.back)();
+    });
+  }, [dragProgress, genie, origin, router, translateY]);
 
   const springBackY = useCallback(() => {
     translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
-  }, [translateY]);
+    dragProgress.value = withSpring(0, { damping: 22, stiffness: 220 });
+  }, [dragProgress, translateY]);
 
   // --------------------------------------------------------------- gestures
 
@@ -272,13 +291,20 @@ export default function AlbumScreen() {
         .activeOffsetY([-12, 12])
         .onUpdate((event) => {
           if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
-            translateY.value = Math.max(event.translationY, 0);
+            const down = Math.max(event.translationY, 0);
+            translateY.value = down;
+            // Shrink and dim from the very first pixel, so the album is
+            // visibly on its way out while the finger is still down.
+            dragProgress.value = Math.min(down / DISMISS_DISTANCE, 1);
           } else {
             translateX.value = event.translationX;
           }
         })
         .onEnd((event) => {
-          if (translateY.value > DISMISS_DISTANCE) {
+          // A quick flick counts even if it did not travel far — waiting for
+          // the full distance makes a deliberate throw feel unresponsive.
+          const flung = event.velocityY > 900 && translateY.value > 30;
+          if (translateY.value > DISMISS_DISTANCE || flung) {
             runOnJS(dismiss)();
             return;
           }
