@@ -3,11 +3,14 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, Text, View } from 'react-native';
 
 import { AlbumCard } from '@/components/album-card';
+import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { fetchFeed, type FeedAlbum } from '@/lib/feed';
 
 export default function FeedScreen() {
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user.id;
   const [albums, setAlbums] = useState<FeedAlbum[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +80,11 @@ export default function FeedScreen() {
             )
           }
           renderItem={({ item }) => (
-            <AlbumCard album={item} onPress={() => router.push(`/album/${item.id}`)} />
+            <AlbumCard
+              album={item}
+              isOwn={item.owner_id === userId}
+              onPress={() => router.push(`/album/${item.id}`)}
+            />
           )}
         />
       </Screen>

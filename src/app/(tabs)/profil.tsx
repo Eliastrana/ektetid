@@ -160,7 +160,7 @@ export default function ProfileScreen() {
           renderItem={({ item }) => (
             <AlbumCard
               album={item}
-              showOwner={false}
+              isOwn
               onPress={() => router.push(`/album/${item.id}`)}
             />
           )}

@@ -7,8 +7,11 @@ import type { FeedAlbum } from '@/lib/feed';
 type Props = {
   album: FeedAlbum;
   onPress: () => void;
-  /** Hide the owner row where it is redundant, e.g. your own profile. */
-  showOwner?: boolean;
+  /**
+   * Your own album. Hides the owner row, which would just be your own name,
+   * and the unseen badge, which is meaningless for something you posted.
+   */
+  isOwn?: boolean;
 };
 
 /**
@@ -16,15 +19,15 @@ type Props = {
  * straight off the image over a bottom dim, and a red badge counting posts you
  * have not seen.
  */
-export function AlbumCard({ album, onPress, showOwner = true }: Props) {
-  const unseen = album.unseen_count ?? 0;
+export function AlbumCard({ album, onPress, isOwn = false }: Props) {
+  const unseen = isOwn ? 0 : (album.unseen_count ?? 0);
   const count = album.post_count ?? 0;
   const owner = album.owner_display_name ?? album.owner_username ?? '';
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${album.title}${showOwner ? ` av ${owner}` : ''}, ${count} bilder${
+      accessibilityLabel={`${album.title}${isOwn ? '' : ` av ${owner}`}, ${count} bilder${
         unseen > 0 ? `, ${unseen} nye` : ''
       }`}
       onPress={onPress}
@@ -51,7 +54,7 @@ export function AlbumCard({ album, onPress, showOwner = true }: Props) {
         {album.coverUrl ? <Scrim /> : null}
 
         <View className="absolute inset-x-3 bottom-3">
-          {showOwner ? (
+          {isOwn ? null : (
             <View className="mb-1.5 flex-row items-center gap-1.5">
               {album.owner_avatar_url ? (
                 <Image
@@ -69,7 +72,7 @@ export function AlbumCard({ album, onPress, showOwner = true }: Props) {
                 {owner}
               </Text>
             </View>
-          ) : null}
+          )}
 
           <View className="flex-row items-end justify-between gap-2">
             <Text numberOfLines={1} className="flex-1 text-base text-ink">
