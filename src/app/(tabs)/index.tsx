@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, RefreshControl, Text, View } from 'react-n
 import { AlbumCard } from '@/components/album-card';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { encodeOrigin } from '@/lib/origin';
 import { fetchFeed, type FeedAlbum } from '@/lib/feed';
 
 export default function FeedScreen() {
@@ -83,7 +84,12 @@ export default function FeedScreen() {
             <AlbumCard
               album={item}
               isOwn={item.owner_id === userId}
-              onPress={() => router.push(`/album/${item.id}`)}
+              onPress={(origin) =>
+                router.push({
+                  pathname: '/album/[id]',
+                  params: { id: item.id!, ...encodeOrigin(origin) },
+                })
+              }
             />
           )}
         />

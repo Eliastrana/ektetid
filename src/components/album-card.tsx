@@ -1,12 +1,15 @@
 import { Image } from 'expo-image';
+import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { Scrim } from '@/components/scrim';
 import type { FeedAlbum } from '@/lib/feed';
+import { measureOrigin, type Origin } from '@/lib/origin';
 
 type Props = {
   album: FeedAlbum;
-  onPress: () => void;
+  /** Receives where the card was on screen, so the album can grow from it. */
+  onPress: (origin: Origin | null) => void;
   /**
    * Your own album. Hides the owner row, which would just be your own name,
    * and the unseen badge, which is meaningless for something you posted.
@@ -20,6 +23,7 @@ type Props = {
  * have not seen.
  */
 export function AlbumCard({ album, onPress, isOwn = false }: Props) {
+  const cardRef = useRef<View>(null);
   const unseen = isOwn ? 0 : (album.unseen_count ?? 0);
   const count = album.post_count ?? 0;
   const owner = album.owner_display_name ?? album.owner_username ?? '';
@@ -30,13 +34,13 @@ export function AlbumCard({ album, onPress, isOwn = false }: Props) {
       accessibilityLabel={`${album.title}${isOwn ? '' : ` av ${owner}`}, ${count} bilder${
         unseen > 0 ? `, ${unseen} nye` : ''
       }`}
-      onPress={onPress}
+      onPress={() => void measureOrigin(cardRef).then(onPress)}
       // maxWidth caps a lone card at half the row. With numColumns={2}, flex-1
       // otherwise stretches the last item across the full width when the count
       // is odd, which makes it enormous.
       style={{ maxWidth: '50%' }}
       className="flex-1 active:opacity-90">
-      <View className="aspect-[3/4] overflow-hidden rounded-tile bg-surface">
+      <View ref={cardRef} className="aspect-[3/4] overflow-hidden rounded-tile bg-surface">
         {album.coverUrl ? (
           <Image
             source={{ uri: album.coverUrl }}

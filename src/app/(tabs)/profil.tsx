@@ -7,6 +7,7 @@ import { AlbumCard } from '@/components/album-card';
 import { AvatarPicker } from '@/components/avatar-picker';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { encodeOrigin } from '@/lib/origin';
 import {
   fetchOwnAlbums,
   fetchProfileStats,
@@ -161,7 +162,12 @@ export default function ProfileScreen() {
             <AlbumCard
               album={item}
               isOwn
-              onPress={() => router.push(`/album/${item.id}`)}
+              onPress={(origin) =>
+                router.push({
+                  pathname: '/album/[id]',
+                  params: { id: item.id!, ...encodeOrigin(origin) },
+                })
+              }
             />
           )}
         />

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Pressable, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -21,6 +22,7 @@ import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
 import { StoryProgress } from '@/components/story-progress';
 import { fetchAlbum, markAlbumRead, type AlbumDetail } from '@/lib/album';
+import { decodeOrigin } from '@/lib/origin';
 import type { ReportTarget } from '@/lib/moderation';
 import { fetchLikes, toggleLike, type LikeState } from '@/lib/social';
 
@@ -36,14 +38,44 @@ const COMMIT_VELOCITY = 550;
 /** Downward drag that dismisses the album. */
 const DISMISS_DISTANCE = 140;
 
+/** How long the album takes to grow out of, or shrink back into, its card. */
+const GENIE_MS = 300;
+
 /** Kept from the original: nudging back past the first post gets an eye-roll. */
 const BOUNCE_EMOJI = ['😬👉️', '😩👉️', '🙄👉', '😵👉'];
 
 export default function AlbumScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{
+    id: string;
+    ox?: string;
+    oy?: string;
+    ow?: string;
+    oh?: string;
+  }>();
+  const { id } = params;
   const router = useRouter();
   const { session } = useAuth();
   const { width } = Dimensions.get('window');
+
+  /*
+   * Grow out of the card that was tapped.
+   *
+   * transformOrigin is set to the card's centre and the whole screen scales up
+   * from the card's proportion of the screen, so the album appears to be the
+   * card enlarging rather than a new screen sliding in. Without an origin —
+   * opened from a deep link, say — it falls back to a plain fade.
+   */
+  const origin = useMemo(() => decodeOrigin(params), [params]);
+  const genie = useSharedValue(origin ? 0 : 1);
+
+  const genieStyle = useAnimatedStyle(() => {
+    if (!origin) return { opacity: genie.value };
+    const startScale = origin.width / width;
+    return {
+      opacity: 0.4 + 0.6 * genie.value,
+      transform: [{ scale: startScale + (1 - startScale) * genie.value }],
+    };
+  });
 
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
   const [index, setIndex] = useState(0);
@@ -83,6 +115,11 @@ export default function AlbumScreen() {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!origin) return;
+    genie.value = withTiming(1, { duration: GENIE_MS, easing: Easing.out(Easing.cubic) });
+  }, [genie, origin]);
 
   // Preload the neighbours so advancing feels instant.
   useEffect(() => {
@@ -188,8 +225,20 @@ export default function AlbumScreen() {
 
   const dismiss = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
-    router.back();
-  }, [router]);
+    if (!origin) {
+      router.back();
+      return;
+    }
+    // Shrink back into the card first, then pop — otherwise the stack
+    // transition and the genie fight each other.
+    genie.value = withTiming(
+      0,
+      { duration: GENIE_MS - 40, easing: Easing.in(Easing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(router.back)();
+      }
+    );
+  }, [genie, origin, router]);
 
   const springBackY = useCallback(() => {
     translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
@@ -274,7 +323,22 @@ export default function AlbumScreen() {
   }
 
   return (
-    <View className="flex-1 bg-canvas">
+    <Animated.View
+      className="flex-1 bg-canvas"
+      style={[
+        genieStyle,
+        // Anchor the scale at the card's centre so the album appears to come
+        // out of that spot rather than the middle of the screen.
+        origin
+          ? {
+              transformOrigin: [
+                origin.x + origin.width / 2,
+                origin.y + origin.height / 2,
+                0,
+              ],
+            }
+          : null,
+      ]}>
       <GestureDetector gesture={gesture}>
         <Animated.View className="flex-1" style={photoStyle}>
           {current?.imageUrl ? (
@@ -422,6 +486,6 @@ export default function AlbumScreen() {
           onClose={() => setShowComments(false)}
         />
       ) : null}
-    </View>
+    </Animated.View>
   );
 }

@@ -52,7 +52,9 @@ function RootNavigator() {
 
       <Stack.Protected guard={signedIn && !needsUsername}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="album/[id]" options={{ animation: 'fade' }} />
+        {/* No stack animation: the album animates itself out of the card it
+            was opened from, and a simultaneous fade would fight it. */}
+        <Stack.Screen name="album/[id]" options={{ animation: 'none' }} />
         <Stack.Screen name="venner" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="innstillinger" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen
