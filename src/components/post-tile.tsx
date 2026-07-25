@@ -34,7 +34,13 @@ const SELFIE_EXPANDED = { width: 132, height: 176 };
  * like the layout is unstable rather than lively, so the reflow is a plain
  * ease-out instead.
  */
-const SPRING = { damping: 20, stiffness: 180, mass: 0.7 } as const;
+/*
+ * Overdamped on purpose. A spring overshoots whenever damping falls below
+ * 2 * sqrt(stiffness * mass) — here that threshold is 23.9, so 30 settles
+ * without ever crossing its target. It keeps the weighted feel of a spring
+ * while removing the bounce entirely.
+ */
+const SPRING = { damping: 30, stiffness: 190, mass: 0.75 } as const;
 const REFLOW = LinearTransition.duration(240).easing(Easing.out(Easing.quad));
 
 function formatNorwegianDate(iso: string): string {
