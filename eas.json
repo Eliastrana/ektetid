@@ -22,7 +22,8 @@
   "submit": {
     "production": {
       "ios": {
-        "bundleIdentifier": "com.eliastrana.ektetid"
+        "bundleIdentifier": "com.eliastrana.ektetid",
+        "ascAppId": "6794649649"
       }
     }
   }
