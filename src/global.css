@@ -15,9 +15,23 @@
   --color-surface: #212225;
   --color-surface-raised: #2e3135;
 
-  --color-glass: rgb(255 255 255 / 0.2);
-  --color-glass-strong: rgb(255 255 255 / 0.3);
-  --color-glass-border: rgb(255 255 255 / 0.25);
+  /*
+   * Surfaces on the near-black canvas: a faint lift rather than a panel.
+   * At 0.07 over #000 this lands around #121212 — present enough to define a
+   * field or a row, quiet enough not to compete with the photography.
+   */
+  --color-glass: rgb(255 255 255 / 0.07);
+  --color-glass-strong: rgb(255 255 255 / 0.13);
+  /* Only used for hairline dividers now that the outlines are gone. */
+  --color-glass-border: rgb(255 255 255 / 0.09);
+
+  /*
+   * Controls that sit over a photo need the opposite treatment. A light veil
+   * disappears against a bright sky, so these darken instead, which keeps a
+   * white icon readable over anything.
+   */
+  --color-overlay: rgb(0 0 0 / 0.4);
+  --color-overlay-strong: rgb(0 0 0 / 0.6);
 
   --color-alert: #ff3b30;
 

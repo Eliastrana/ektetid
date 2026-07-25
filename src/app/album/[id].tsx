@@ -304,7 +304,7 @@ export default function AlbumScreen() {
               accessibilityRole="button"
               accessibilityLabel="Lukk album"
               onPress={dismiss}
-              className="h-11 w-11 items-center justify-center rounded-full border border-glass-border bg-glass">
+              className="h-11 w-11 items-center justify-center rounded-full bg-overlay">
               <SymbolView
                 name="xmark"
                 size={17}

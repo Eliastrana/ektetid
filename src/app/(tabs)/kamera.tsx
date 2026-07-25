@@ -211,7 +211,7 @@ export default function CameraScreen() {
                 setFlash((current) => (current === 'off' ? 'auto' : 'off'));
               }}
               hitSlop={8}
-              className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+              className="h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
               <SymbolView
                 name={flash === 'off' ? 'bolt.slash.fill' : 'bolt.fill'}
                 size={26}
@@ -223,7 +223,7 @@ export default function CameraScreen() {
 
           {/* The first frame, shown while the front lens settles. */}
           {preview ? (
-            <View className="absolute right-5 top-20 h-32 w-24 overflow-hidden rounded-tile border border-glass-border">
+            <View className="absolute right-5 top-20 h-32 w-24 overflow-hidden rounded-tile">
               <Image source={{ uri: preview }} style={{ flex: 1 }} contentFit="cover" />
             </View>
           ) : null}
@@ -232,7 +232,7 @@ export default function CameraScreen() {
             {/* Lens picker. Only rendered when the device actually reports an
                 ultra-wide, so single-lens iPhones and Android see nothing. */}
             {zoomOptions.length > 1 && !busy ? (
-              <View className="flex-row items-center gap-1 rounded-full border border-glass-border bg-glass p-1">
+              <View className="flex-row items-center gap-1 rounded-full bg-overlay p-1">
                 {zoomOptions.map((lens) => {
                   const selected = lens.id === backLens;
                   return (
@@ -279,7 +279,7 @@ export default function CameraScreen() {
                 disabled={busy}
                 onPress={pickFromLibrary}
                 hitSlop={10}
-                className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                className="h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
                 <SymbolView
                   name="photo.on.rectangle"
                   size={26}
@@ -310,7 +310,7 @@ export default function CameraScreen() {
                   setFacing((current) => (current === 'back' ? 'front' : 'back'));
                 }}
                 hitSlop={10}
-                className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                className="h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
                 <SymbolView
                   name="arrow.triangle.2.circlepath.camera.fill"
                   size={26}

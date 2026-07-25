@@ -69,7 +69,7 @@ export function AvatarPicker({ userId, avatarUrl, initials, onChanged }: Props) 
       onLongPress={confirmRemove}
       disabled={busy}
       className="active:opacity-80">
-      <View className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border border-glass-border bg-glass">
+      <View className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-glass">
         {busy ? (
           <ActivityIndicator color="#ffffff" />
         ) : avatarUrl ? (

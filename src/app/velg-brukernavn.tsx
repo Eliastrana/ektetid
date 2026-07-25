@@ -48,7 +48,7 @@ export default function ChooseUsernameScreen() {
             Det er slik vennene dine finner deg.
           </Text>
 
-          <View className="mt-8 flex-row items-center rounded-tile border border-glass-border bg-glass px-4">
+          <View className="mt-8 flex-row items-center rounded-tile bg-glass px-4">
             <Text className="text-xl text-muted">@</Text>
             <TextInput
               value={value}

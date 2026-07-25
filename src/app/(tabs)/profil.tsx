@@ -88,7 +88,7 @@ export default function ProfileScreen() {
                   accessibilityLabel="Innstillinger"
                   onPress={() => router.push('/innstillinger')}
                   hitSlop={10}
-                  className="h-11 w-11 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                  className="h-11 w-11 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
                   <SymbolView
                     name="gearshape.fill"
                     size={20}
@@ -118,7 +118,7 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              <View className="mt-6 flex-row rounded-tile border border-glass-border bg-glass py-4">
+              <View className="mt-6 flex-row rounded-tile bg-glass py-4">
                 <Stat value={stats?.posts ?? 0} label="bilder" />
                 <Stat value={stats?.albums ?? 0} label="album" />
                 <Stat value={stats?.heartsReceived ?? 0} label="hjerter" />
@@ -127,7 +127,7 @@ export default function ProfileScreen() {
               <Pressable
                 accessibilityRole="button"
                 onPress={() => router.push('/venner')}
-                className="mt-3 h-14 flex-row items-center justify-between rounded-tile border border-glass-border bg-glass px-4 active:bg-glass-strong">
+                className="mt-3 h-14 flex-row items-center justify-between rounded-tile bg-glass px-4 active:bg-glass-strong">
                 <Text className="text-base text-ink">Venner</Text>
                 <View className="flex-row items-center gap-2">
                   <Text className="text-base text-muted">{stats?.friends ?? 0}</Text>

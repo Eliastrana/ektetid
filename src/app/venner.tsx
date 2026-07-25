@@ -126,7 +126,7 @@ export default function FriendsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Tilbake"
             onPress={() => router.back()}
-            className="h-10 w-10 items-center justify-center rounded-full border border-glass-border bg-glass">
+            className="h-10 w-10 items-center justify-center rounded-full bg-glass">
             <SymbolView
               name="chevron.left"
               size={18}
@@ -146,7 +146,7 @@ export default function FriendsScreen() {
             placeholder="Søk etter brukernavn"
             placeholderTextColor="#6b6f76"
             selectionColor="#ffffff"
-            className="h-12 rounded-tile border border-glass-border bg-glass px-4 text-base leading-none text-ink"
+            className="h-12 rounded-tile bg-glass px-4 text-base leading-none text-ink"
           />
           {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
         </View>
@@ -184,7 +184,7 @@ export default function FriendsScreen() {
             const busy = busyId === profile.id;
 
             return (
-              <View className="mb-2 flex-row items-center gap-3 rounded-tile border border-glass-border bg-glass p-3">
+              <View className="mb-2 flex-row items-center gap-3 rounded-tile bg-glass p-3">
                 <Avatar url={profile.avatar_url} />
                 <View className="flex-1">
                   <Text className="text-base text-ink">
@@ -221,7 +221,7 @@ export default function FriendsScreen() {
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => act(profile.id, () => removeFriendship(selfId, profile.id))}
-                      className="rounded-full border border-glass-border px-4 py-2 active:opacity-70">
+                      className="rounded-full px-4 py-2 active:opacity-70">
                       <Text className="text-sm text-ink">Avslå</Text>
                     </Pressable>
                   </View>
@@ -230,7 +230,7 @@ export default function FriendsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Fjern ${profile.username}`}
                     onPress={() => act(profile.id, () => removeFriendship(selfId, profile.id))}
-                    className="rounded-full border border-glass-border px-4 py-2 active:opacity-70">
+                    className="rounded-full px-4 py-2 active:opacity-70">
                     <Text className="text-sm text-muted">
                       {row.item.status === 'pending' ? 'Avbryt' : 'Fjern'}
                     </Text>

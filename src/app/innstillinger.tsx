@@ -66,7 +66,7 @@ export default function SettingsScreen() {
             accessibilityLabel="Tilbake"
             onPress={() => router.back()}
             hitSlop={10}
-            className="h-10 w-10 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+            className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
             <SymbolView
               name="chevron.left"
               size={18}
@@ -79,7 +79,7 @@ export default function SettingsScreen() {
 
         <View className="mt-8 flex-1 px-5">
           <Text className="mb-2 text-sm text-muted">Konto</Text>
-          <View className="overflow-hidden rounded-tile border border-glass-border bg-glass">
+          <View className="overflow-hidden rounded-tile bg-glass">
             <View className="px-4 py-3">
               <Text className="text-xs text-muted">Brukernavn</Text>
               <Text className="text-base text-ink">@{profile?.username}</Text>
@@ -97,7 +97,7 @@ export default function SettingsScreen() {
           <Pressable
             accessibilityRole="button"
             onPress={() => void signOut()}
-            className="h-14 items-center justify-center rounded-tile border border-glass-border bg-glass active:bg-glass-strong">
+            className="h-14 items-center justify-center rounded-tile bg-glass active:bg-glass-strong">
             <Text className="text-base text-ink">Logg ut</Text>
           </Pressable>
 

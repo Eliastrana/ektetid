@@ -88,7 +88,7 @@ export default function SignInScreen() {
                   placeholder="000000"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile border border-glass-border bg-glass text-center text-2xl leading-none text-ink"
+                  className="h-14 rounded-tile bg-glass text-center text-2xl leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"
@@ -136,7 +136,7 @@ export default function SignInScreen() {
                   accessibilityRole="button"
                   disabled={busy !== null}
                   onPress={() => run('google', signInWithGoogle)}
-                  className="h-[54px] flex-row items-center justify-center rounded-tile border border-glass-border bg-glass active:bg-glass-strong">
+                  className="h-[54px] flex-row items-center justify-center rounded-tile bg-glass active:bg-glass-strong">
                   {busy === 'google' ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
@@ -160,7 +160,7 @@ export default function SignInScreen() {
                   placeholder="din@epost.no"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile border border-glass-border bg-glass px-4 text-base leading-none text-ink"
+                  className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"
