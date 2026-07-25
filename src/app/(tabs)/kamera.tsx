@@ -45,13 +45,30 @@ const SELFIE_COUNTDOWN = 3;
  */
 function backLensOptions(lenses: string[]): { id: string; label: string }[] {
   const ultraWide = lenses.find((lens) => lens.toLowerCase().includes('ultra'));
+
+  /*
+   * The plain wide-angle camera, and nothing that merely contains one.
+   *
+   * The device also reports virtual cameras that combine several physical
+   * ones — "Back Dual Wide Camera", "Back Triple Camera". Those pass a naive
+   * "not ultra, not tele" test, and picking one is why every shot came out at
+   * 0,5: on a virtual device that includes an ultra-wide, zoom factor 1.0 is
+   * the ultra-wide's field of view, not the wide one's. The 1× equivalent is
+   * factor 2.0. Excluding them leaves the real wide-angle camera, whose own
+   * default framing is what "1" is supposed to mean.
+   */
+  const combined = ['dual', 'triple', 'lidar', 'truedepth'];
   const wide = lenses.find((lens) => {
     const name = lens.toLowerCase();
-    return !name.includes('ultra') && !name.includes('tele');
+    if (name.includes('ultra') || name.includes('tele')) return false;
+    return !combined.some((part) => name.includes(part));
   });
 
   const options: { id: string; label: string }[] = [];
   if (ultraWide) options.push({ id: ultraWide, label: '0,5' });
+  // Omitted rather than guessed at if no single-lens camera is reported.
+  // Leaving selectedLens unset falls back to the system's own choice, which is
+  // a sensible 1×; naming a virtual device instead would not be.
   if (wide) options.push({ id: wide, label: '1' });
   return options;
 }
@@ -212,7 +229,11 @@ export default function CameraScreen() {
         // The takePictureAsync option of the same name is deprecated in SDK 57.
         mirror
         onAvailableLensesChanged={({ lenses }) => {
-          console.log('[kamera] lenses:', lenses.join(', '));
+          // Both the raw names and what they were classified as: the names
+          // differ by model and by language, so a wrong pick is only
+          // diagnosable if you can see what there was to choose from.
+          console.log('[kamera] lenses:', lenses.join(' | '));
+          console.log('[kamera] chose:', JSON.stringify(backLensOptions(lenses)));
           setAvailableLenses(lenses);
           // Settle on the plain wide lens once the names are known, so the
           // control starts on 1 rather than on whatever the system defaulted to.
