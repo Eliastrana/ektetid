@@ -118,9 +118,21 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                       <ActivityIndicator color="#ffffff" />
                     </View>
                   ) : (
-                    <Text className="py-10 text-center text-sm text-muted">
-                      Si noe kult…
-                    </Text>
+                    // Icon rather than a line of encouragement: the empty state
+                    // is seen constantly and a prompt that asks for something
+                    // clever gets tiring. Labelled for screen readers, which
+                    // otherwise land on an empty list with nothing to announce.
+                    <View
+                      className="items-center py-12"
+                      accessible
+                      accessibilityLabel="Ingen kommentarer ennå">
+                      <SymbolView
+                        name="airplane.departure"
+                        size={40}
+                        tintColor="#3a3d42"
+                        fallback={<Text className="text-4xl opacity-30">✈️</Text>}
+                      />
+                    </View>
                   )
                 }
                 renderItem={({ item }) => (
@@ -161,7 +173,7 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                 <TextInput
                   value={draft}
                   onChangeText={setDraft}
-                  placeholder="Si noe kult…"
+                  placeholder="Skriv en kommentar…"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
                   maxLength={2000}

@@ -48,6 +48,30 @@ const DISMISS_DISTANCE = 110;
 /** How long the album takes to grow out of, or shrink back into, its card. */
 const GENIE_MS = 300;
 
+/**
+ * Drag distance that closes the album completely, in points.
+ *
+ * Held all the way down, the album ends up exactly the size and position of
+ * the card it came from — the gesture runs the whole close, and releasing
+ * only commits what is already on screen.
+ */
+const DRAG_FULL = 280;
+
+/**
+ * Shapes the drag so the close leads the finger.
+ *
+ * Below 1 the album gives up size quickly at the start and more slowly near
+ * the end. Mapped linearly the first few pixels of a drag do almost nothing
+ * visible, which is what made the close feel late.
+ */
+const DRAG_CURVE = 0.7;
+
+/** How much of the finger's travel the album follows, as a fraction. */
+const DRAG_FOLLOW = 0.3;
+
+/** The card's corner radius — `--radius-tile` in global.css. */
+const CARD_RADIUS = 12;
+
 /** Kept from the original: nudging back past the first post gets an eye-roll. */
 const BOUNCE_EMOJI = ['😬👉️', '😩👉️', '🙄👉', '😵👉'];
 
@@ -58,19 +82,20 @@ export default function AlbumScreen() {
     oy?: string;
     ow?: string;
     oh?: string;
+    /** The card's cover photo, so the opening animation has something to show. */
+    cover?: string;
+    /** Its blurhash, for the case where the cover is not cached after all. */
+    cb?: string;
   }>();
   const { id } = params;
   const router = useRouter();
   const { session } = useAuth();
-  const { width } = Dimensions.get('window');
+  const { width, height } = Dimensions.get('window');
 
   /*
-   * Grow out of the card that was tapped.
-   *
-   * transformOrigin is set to the card's centre and the whole screen scales up
-   * from the card's proportion of the screen, so the album appears to be the
-   * card enlarging rather than a new screen sliding in. Without an origin —
-   * opened from a deep link, say — it falls back to a plain fade.
+   * Grow out of the card that was tapped, so the album reads as that card
+   * enlarging rather than as a new screen arriving. Without an origin — opened
+   * from a deep link, say — it falls back to a plain fade.
    */
   // Memoised on the primitives, not on `params`: useLocalSearchParams returns a
   // fresh object every render, so depending on it produced a new `origin` each
@@ -78,26 +103,79 @@ export default function AlbumScreen() {
   const { ox, oy, ow, oh } = params;
   const origin = useMemo(() => decodeOrigin({ ox, oy, ow, oh }), [ox, oy, ow, oh]);
   const genie = useSharedValue(origin ? 0 : 1);
-  /**
-   * How far through a dismiss drag we are, 0 to 1.
-   *
-   * Kept separate from `genie` so the drag can shrink and dim the album live —
-   * the close reads as already happening under your finger, rather than
-   * nothing until you let go.
-   */
-  const dragProgress = useSharedValue(0);
+  // Declared here rather than with the other state below: genieStyle reads
+  // translateY, so it has to exist before that hook runs.
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const chrome = useSharedValue(1);
 
+
+  /*
+   * Interpolate the album's rectangle between the card and the full screen.
+   *
+   * Both axes are scaled independently, and the whole thing is translated so
+   * that at rest it sits exactly on top of the card. A single uniform scale
+   * anchored at the card's centre — the obvious version — is wrong: the card
+   * is 3:4 and the screen is far taller, so matching the width left the height
+   * badly off, and the album started as a rectangle that was never the card.
+   * That mismatch is what made the transition look approximate.
+   *
+   * Opacity reaches 1 within the first third rather than ramping across the
+   * whole animation. It is there to cover the moment the overlay chrome
+   * appears, not to cross-fade the screen — a window being un-minimised does
+   * not fade, and dragging the fade out the full duration was most of why this
+   * felt hazy instead of crisp.
+   *
+   * A dismiss drag feeds the same `genie`, so the album shrinks towards its
+   * card under the finger. It used to slide the photo down at full finger
+   * distance while separately dimming the screen, and only run the shrink on
+   * release — two different animations for one gesture, which is why the drag
+   * read as a translucent panel moving away rather than as the album closing.
+   */
   const genieStyle = useAnimatedStyle(() => {
-    const dragScale = 1 - 0.18 * dragProgress.value;
-    const dragFade = 1 - 0.4 * dragProgress.value;
     if (!origin) {
-      return { opacity: genie.value * dragFade, transform: [{ scale: dragScale }] };
+      return {
+        opacity: genie.value,
+        transform: [{ translateY: translateY.value * DRAG_FOLLOW }],
+      };
     }
-    const startScale = origin.width / width;
-    const openScale = startScale + (1 - startScale) * genie.value;
+
+    const t = genie.value;
+    const scaleX = origin.width / width + (1 - origin.width / width) * t;
+    const scaleY = origin.height / height + (1 - origin.height / height) * t;
+
+    // Distance from the screen's centre to the card's, closing to zero as the
+    // album opens. Listed before the scales so it is measured in unscaled
+    // points, and the scaling then happens about the card's centre.
+    const offsetX = (origin.x + origin.width / 2 - width / 2) * (1 - t);
+    const offsetY = (origin.y + origin.height / 2 - height / 2) * (1 - t);
+
     return {
-      opacity: (0.4 + 0.6 * genie.value) * dragFade,
-      transform: [{ scale: openScale * dragScale }],
+      opacity: Math.min(1, t * 3),
+      /*
+       * Match the card's corners as the album closes into them.
+       *
+       * Divided by the scale because the radius is drawn before the transform
+       * is applied: at a third of full size an untouched 12pt corner renders
+       * as 4pt, and the album would arrive at the card visibly squarer than
+       * the card itself. The corners go elliptical, since the two axes scale
+       * differently, but only while in flight.
+       */
+      borderRadius: (CARD_RADIUS * (1 - t)) / scaleX,
+      transform: [
+        { translateX: offsetX },
+        /*
+         * The finger's slide, fading out as the album reaches the card.
+         *
+         * Held to the end it would otherwise land the album a fixed distance
+         * below its target — the offset above closes to zero, but this one
+         * does not. Weighting it by `t` blends the two: the touch leads while
+         * the album is still large, the card wins as it gets small.
+         */
+        { translateY: offsetY + translateY.value * DRAG_FOLLOW * t },
+        { scaleX },
+        { scaleY },
+      ],
     };
   });
 
@@ -110,9 +188,6 @@ export default function AlbumScreen() {
   const [showComments, setShowComments] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const chrome = useSharedValue(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const posts = useMemo(() => album?.posts ?? [], [album]);
@@ -262,12 +337,31 @@ export default function AlbumScreen() {
       return;
     }
 
-    const exit = { duration: GENIE_MS - 40, easing: Easing.in(Easing.cubic) } as const;
+    /*
+     * inOut rather than in: a cubic ease-in creeps for its first third, and on
+     * a dismiss that lag reads as the tap not registering.
+     *
+     * The duration covers however much of the close is left. A drag has
+     * already shrunk the album most of the way, so spending the full time on
+     * the remainder crawls — the gesture would finish fast under the finger
+     * and then visibly slow down the moment it was released. Floored so a
+     * drag taken right to the threshold still animates rather than blinking.
+     */
+    // Already dragged onto the card: there is nothing left to play.
+    if (genie.value <= 0.02) {
+      router.back();
+      return;
+    }
 
-    // Unwind the drag over the same interval as the shrink. Left alone, the
-    // drag's own scale and offset would still be applied at the end, so the
-    // album would land smaller than the card and below it.
-    dragProgress.value = withTiming(0, exit);
+    const remaining = Math.max(genie.value, 0.35);
+    const exit = {
+      duration: (GENIE_MS - 20) * remaining,
+      easing: Easing.inOut(Easing.cubic),
+    } as const;
+
+    // Unwind the finger's offset over the same interval as the shrink. Left
+    // alone it would still be applied at the end, landing the album below the
+    // card rather than on it.
     translateY.value = withTiming(0, exit);
 
     // Shrink back into the card first, then pop — popping first would cut the
@@ -275,12 +369,14 @@ export default function AlbumScreen() {
     genie.value = withTiming(0, exit, (finished) => {
       if (finished) runOnJS(router.back)();
     });
-  }, [dragProgress, genie, origin, router, translateY]);
+  }, [genie, origin, router, translateY]);
 
+  /** Cancelled drag: re-open, matching the curve the button uses. */
   const springBackY = useCallback(() => {
-    translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
-    dragProgress.value = withSpring(0, { damping: 22, stiffness: 220 });
-  }, [dragProgress, translateY]);
+    const back = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
+    translateY.value = withTiming(0, back);
+    genie.value = withTiming(1, back);
+  }, [genie, translateY]);
 
   // --------------------------------------------------------------- gestures
 
@@ -293,9 +389,11 @@ export default function AlbumScreen() {
           if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
             const down = Math.max(event.translationY, 0);
             translateY.value = down;
-            // Shrink and dim from the very first pixel, so the album is
-            // visibly on its way out while the finger is still down.
-            dragProgress.value = Math.min(down / DISMISS_DISTANCE, 1);
+            // Drive the close itself, from the very first pixel, so the album
+            // is visibly shrinking back towards its card while the finger is
+            // still down rather than waiting for the release. Held all the way
+            // down this reaches the card exactly.
+            genie.value = 1 - Math.pow(Math.min(down / DRAG_FULL, 1), DRAG_CURVE);
           } else {
             translateX.value = event.translationX;
           }
@@ -330,17 +428,41 @@ export default function AlbumScreen() {
   const gesture = useMemo(() => Gesture.Exclusive(pan, tap), [pan, tap]);
 
   const photoStyle = useAnimatedStyle(() => ({
-    // Damped so the photo hints at the drag without fully leaving the screen.
-    transform: [{ translateX: translateX.value * 0.4 }, { translateY: translateY.value }],
+    // Horizontal only. A downward drag now moves the whole album via genieStyle,
+    // and sliding the photo inside it as well made the two come apart.
+    transform: [{ translateX: translateX.value * 0.4 }],
   }));
 
   // ------------------------------------------------------------------ render
 
+  /*
+   * Every state renders inside the animated shell, never instead of it.
+   *
+   * These used to be early returns above the transition. Because the album is
+   * deliberately not applied until the opening animation has finished, that
+   * meant the whole open played on the loading branch — a plain, untransformed
+   * black screen — and the real album appeared afterwards at full size. The
+   * animation was running the entire time on a tree that was not on screen.
+   */
+  const shell = (children: React.ReactNode) => (
+    <Animated.View
+      // overflow-hidden so the animated corner radius actually clips the photo
+      // filling the shell. The comment and report sheets are Modals, so they
+      // are portalled out and stay unclipped.
+      className="flex-1 overflow-hidden bg-canvas"
+      // No transformOrigin: the translate in genieStyle puts the album over the
+      // card itself, so scaling about the default centre is already scaling
+      // about the card's centre.
+      style={genieStyle}>
+      {children}
+    </Animated.View>
+  );
+
   if (error) {
-    return (
-      <View className="flex-1 items-center justify-center gap-3 bg-canvas px-8">
+    return shell(
+      <View className="flex-1 items-center justify-center gap-3 px-8">
         <Text className="text-center text-base text-muted">{error}</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.back()}>
+        <Pressable accessibilityRole="button" onPress={dismiss}>
           <Text className="text-base text-ink">Tilbake</Text>
         </Pressable>
       </View>
@@ -348,42 +470,48 @@ export default function AlbumScreen() {
   }
 
   if (!album) {
-    return (
-      <View className="flex-1 items-center justify-center bg-canvas">
-        <ActivityIndicator color="#ffffff" />
-      </View>
+    /*
+     * The card's own cover, carried through the route.
+     *
+     * The album is deliberately not applied until the opening animation has
+     * finished, so without this the shell grows as an empty black rectangle
+     * and the photo only appears once it has stopped — two stages where there
+     * should be one. The image was on screen a moment ago as the card, so it
+     * is already in expo-image's cache and renders on the first frame.
+     *
+     * No spinner: it would show for exactly the length of the animation and
+     * then leave, which reads as a stutter rather than as loading.
+     */
+    return shell(
+      params.cover ? (
+        <Image
+          source={{ uri: params.cover }}
+          placeholder={params.cb ? { blurhash: params.cb } : undefined}
+          contentFit="cover"
+          // No fade — it would run against the growing shell and muddy it.
+          transition={0}
+          style={{ flex: 1 }}
+        />
+      ) : (
+        <View className="flex-1" />
+      )
     );
   }
 
   if (posts.length === 0) {
-    return (
-      <View className="flex-1 items-center justify-center gap-3 bg-canvas px-8">
+    return shell(
+      <View className="flex-1 items-center justify-center gap-3 px-8">
         <Text className="text-base text-ink">{album.title}</Text>
         <Text className="text-sm text-muted">Dette albumet er tomt.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.back()}>
+        <Pressable accessibilityRole="button" onPress={dismiss}>
           <Text className="mt-2 text-base text-ink">Tilbake</Text>
         </Pressable>
       </View>
     );
   }
 
-  return (
-    <Animated.View
-      className="flex-1 bg-canvas"
-      style={[
-        genieStyle,
-        // Anchor the scale at the card's centre so the album appears to come
-        // out of that spot rather than the middle of the screen.
-        origin
-          ? {
-              transformOrigin: [
-                origin.x + origin.width / 2,
-                origin.y + origin.height / 2,
-                0,
-              ],
-            }
-          : null,
-      ]}>
+  return shell(
+    <>
       <GestureDetector gesture={gesture}>
         <Animated.View className="flex-1" style={photoStyle}>
           {current?.imageUrl ? (
@@ -555,6 +683,6 @@ export default function AlbumScreen() {
           onClose={() => setShowComments(false)}
         />
       ) : null}
-    </Animated.View>
+    </>
   );
 }

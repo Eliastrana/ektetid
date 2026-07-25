@@ -52,9 +52,22 @@ function RootNavigator() {
 
       <Stack.Protected guard={signedIn && !needsUsername}>
         <Stack.Screen name="(tabs)" />
-        {/* No stack animation: the album animates itself out of the card it
-            was opened from, and a simultaneous fade would fight it. */}
-        <Stack.Screen name="album/[id]" options={{ animation: 'none' }} />
+        {/*
+          No stack animation: the album animates itself out of the card it was
+          opened from, and a simultaneous fade would fight it.
+
+          Transparent so the grid underneath stays on screen. Opaque, there was
+          nothing behind the album as it shrank, so the close played against a
+          flat background and never read as returning to the card.
+        */}
+        <Stack.Screen
+          name="album/[id]"
+          options={{
+            animation: 'none',
+            presentation: 'transparentModal',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
         <Stack.Screen name="venner" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="profil/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="rediger-album/[id]" options={{ animation: 'slide_from_right' }} />

@@ -69,7 +69,8 @@
             ]
           }
         ]
-      }
+      },
+      "appleTeamId": "J45NQ8GG3G"
     },
     "android": {
       "package": "com.eliastrana.ektetid",
@@ -157,7 +158,8 @@
         }
       ],
       "expo-sharing",
-      "expo-maps"
+      "expo-maps",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true,

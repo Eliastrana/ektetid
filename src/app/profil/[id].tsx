@@ -203,7 +203,14 @@ export default function PublicProfileScreen() {
               onPress={(origin) =>
                 router.push({
                   pathname: '/album/[id]',
-                  params: { id: item.id!, ...encodeOrigin(origin) },
+                  params: {
+                    id: item.id!,
+                    ...encodeOrigin(origin),
+                    // Lets the opening animation show the photo immediately
+                    // rather than growing an empty rectangle.
+                    ...(item.coverUrl ? { cover: item.coverUrl } : {}),
+                    ...(item.cover_blurhash ? { cb: item.cover_blurhash } : {}),
+                  },
                 })
               }
             />
