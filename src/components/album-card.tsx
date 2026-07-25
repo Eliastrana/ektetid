@@ -91,6 +91,12 @@ export function AlbumCard({ album, onPress, isOwn = false, showOwner = true }: P
             </Text>
             <Text className="text-xs text-ink opacity-70">{count}</Text>
           </View>
+
+          {album.description ? (
+            <Text numberOfLines={1} className="mt-0.5 text-xs text-ink opacity-70">
+              {album.description}
+            </Text>
+          ) : null}
         </View>
       </View>
 

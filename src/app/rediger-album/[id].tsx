@@ -46,6 +46,7 @@ export default function EditAlbumScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dirtyOrder, setDirtyOrder] = useState(false);
+  const [savedField, setSavedField] = useState<'title' | 'description' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -195,13 +196,23 @@ export default function EditAlbumScreen() {
                 <Text className="text-3xl text-ink">Rediger</Text>
               </View>
 
-              <Text className="mb-2 mt-6 text-sm text-muted">Tittel</Text>
+              <View className="mb-2 mt-6 flex-row items-center justify-between">
+                <Text className="text-sm text-muted">Tittel</Text>
+                {savedField === 'title' ? (
+                  <Text className="text-xs text-muted">Lagret</Text>
+                ) : null}
+              </View>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
                 onBlur={() => {
+                  // Saves on blur — no button. The confirmation exists because
+                  // a silent write leaves you unsure whether it took.
                   if (title.trim() && title.trim() !== album.title) {
-                    void run(() => updateAlbum(album.id, { title: title.trim() }));
+                    void run(() => updateAlbum(album.id, { title: title.trim() })).then(() => {
+                      setSavedField('title');
+                      setTimeout(() => setSavedField(null), 2000);
+                    });
                   }
                 }}
                 maxLength={60}
@@ -210,7 +221,12 @@ export default function EditAlbumScreen() {
                 className="h-14 rounded-tile bg-glass px-4 text-xl leading-none text-ink"
               />
 
-              <Text className="mb-2 mt-4 text-sm text-muted">Beskrivelse</Text>
+              <View className="mb-2 mt-4 flex-row items-center justify-between">
+                <Text className="text-sm text-muted">Beskrivelse</Text>
+                {savedField === 'description' ? (
+                  <Text className="text-xs text-muted">Lagret</Text>
+                ) : null}
+              </View>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
@@ -218,12 +234,15 @@ export default function EditAlbumScreen() {
                   if (description.trim() !== (album.description ?? '')) {
                     void run(() =>
                       updateAlbum(album.id, { description: description.trim() || null })
-                    );
+                    ).then(() => {
+                      setSavedField('description');
+                      setTimeout(() => setSavedField(null), 2000);
+                    });
                   }
                 }}
                 multiline
                 maxLength={500}
-                placeholder="Valgfritt"
+                placeholder="Vises under tittelen på albumet"
                 placeholderTextColor="#6b6f76"
                 selectionColor="#ffffff"
                 className="min-h-20 rounded-tile bg-glass px-4 py-3 text-base text-ink"

@@ -421,9 +421,16 @@ export default function AlbumScreen() {
                 fallback={<Text className="text-lg text-ink">✕</Text>}
               />
             </Pressable>
-            <Text numberOfLines={1} className="ml-3 flex-1 text-right text-base text-ink">
-              {album.title}
-            </Text>
+            <View className="ml-3 flex-1">
+              <Text numberOfLines={1} className="text-right text-base text-ink">
+                {album.title}
+              </Text>
+              {album.description ? (
+                <Text numberOfLines={1} className="text-right text-xs text-ink opacity-70">
+                  {album.description}
+                </Text>
+              ) : null}
+            </View>
 
             {album.canEdit ? (
               <Pressable
