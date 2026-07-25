@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/components/auth-provider';
+import { useNotificationRouting } from '@/lib/use-notification-routing';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -28,6 +29,9 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { session, initializing, needsUsername } = useAuth();
+
+  // Tapping a notification should land on the thing it is about, not the feed.
+  useNotificationRouting();
 
   // Hold the splash until we know whether there is a stored session, so the
   // sign-in screen never flashes for an already-signed-in user.

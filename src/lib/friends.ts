@@ -1,4 +1,5 @@
 import type { FriendshipStatus, Profile } from '@/lib/database.types';
+import { notify } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 export type FriendRequest = {
@@ -57,6 +58,7 @@ export async function sendFriendRequest(selfId: string, addresseeId: string): Pr
     .from('friendships')
     .insert({ requester_id: selfId, addressee_id: addresseeId });
   if (error) throw error;
+  notify('friend_request', addresseeId);
 }
 
 /**
@@ -71,6 +73,7 @@ export async function acceptFriendRequest(requesterId: string, selfId: string): 
     .eq('requester_id', requesterId)
     .eq('addressee_id', selfId);
   if (error) throw error;
+  notify('friend_accepted', requesterId);
 }
 
 /** Decline a request, or remove an existing friend. Symmetric either way. */

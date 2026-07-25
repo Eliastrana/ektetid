@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
+import { registerForPush } from '@/lib/notifications';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -125,6 +126,10 @@ export default function NewPostScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       clearPendingCapture();
+      // Asked for here rather than on launch: iOS grants one prompt, and a
+      // user who has just published has a reason to want the answer.
+      void registerForPush(userId).catch(() => {});
+
       router.dismissTo('/');
     } catch (caught) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

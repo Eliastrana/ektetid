@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+import { unregisterPush } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 /** Thrown when the user backs out of a sign-in sheet. Callers should stay quiet. */
@@ -135,6 +136,11 @@ export async function verifyEmailCode(email: string, code: string): Promise<void
 }
 
 export async function signOut(): Promise<void> {
+  // Before the session goes: deleting the row needs the policy to still see
+  // this user as its owner. Left behind, the device would keep receiving
+  // notifications meant for whoever just signed out.
+  await unregisterPush();
+
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }

@@ -1,9 +1,3 @@
-/**
- * Generated from the local Supabase schema. Do not edit by hand.
- *
- *   supabase gen types typescript --local --schema public > src/lib/database.types.ts
- */
-
 export type Json =
   | string
   | number
@@ -13,6 +7,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       album_members: {
@@ -249,6 +268,44 @@ export type Database = {
             foreignKeyName: "likes_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_prefs: {
+        Row: {
+          comments: boolean
+          friend_posts: boolean
+          friend_requests: boolean
+          likes: boolean
+          shared_album_posts: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comments?: boolean
+          friend_posts?: boolean
+          friend_requests?: boolean
+          likes?: boolean
+          shared_album_posts?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comments?: boolean
+          friend_posts?: boolean
+          friend_requests?: boolean
+          likes?: boolean
+          shared_album_posts?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_prefs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -667,6 +724,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       friendship_status: ["pending", "accepted", "blocked"],
@@ -675,7 +735,6 @@ export const Constants = {
   },
 } as const
 
-
 export type FriendshipStatus = Database['public']['Enums']['friendship_status'];
 export type ReportReason = Database['public']['Enums']['report_reason'];
 export type AlbumFeedRow = Database['public']['Views']['album_feed']['Row'];
@@ -683,3 +742,4 @@ export type Profile = Tables<'profiles'>;
 export type Album = Tables<'albums'>;
 export type Post = Tables<'posts'>;
 export type Comment = Tables<'comments'>;
+export type NotificationPrefs = Tables<'notification_prefs'>;

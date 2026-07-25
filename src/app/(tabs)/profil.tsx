@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } fr
 
 import { AlbumCard } from '@/components/album-card';
 import { AvatarPicker } from '@/components/avatar-picker';
+import { NotificationSettings } from '@/components/notification-settings';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { encodeOrigin } from '@/lib/origin';
@@ -140,6 +141,9 @@ export default function ProfileScreen() {
                   />
                 </View>
               </Pressable>
+
+              <Text className="mb-1 mt-7 text-sm text-muted">Varsler</Text>
+              {userId ? <NotificationSettings userId={userId} /> : null}
 
               <Text className="mb-1 mt-7 text-sm text-muted">Albumene dine</Text>
             </View>

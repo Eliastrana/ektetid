@@ -4,6 +4,7 @@ import { File } from 'expo-file-system';
 import type { Coordinates } from '@/lib/geo';
 import { processImage, processSelfie } from '@/lib/image-pipeline';
 import type { PendingCapture } from '@/lib/pending-capture';
+import { notify } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 const BUCKET = 'photos';
@@ -99,6 +100,7 @@ export async function publishPost(
     throw error;
   }
 
+  notify('post', data.id);
   return data.id;
 }
 

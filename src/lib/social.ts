@@ -1,4 +1,5 @@
 import type { Comment, Profile } from '@/lib/database.types';
+import { notify } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 export type CommentWithAuthor = Comment & { author: Pick<Profile, 'username' | 'avatar_url'> };
@@ -41,6 +42,16 @@ export async function toggleLike(
   const { error } = await supabase.from('likes').insert({ post_id: postId, user_id: selfId });
   // A duplicate just means a double-tap raced; the desired state already holds.
   if (error && error.code !== '23505') throw error;
+
+  /*
+   * Announced after the insert, never before.
+   *
+   * The server confirms the like actually exists before it will send anything,
+   * so announcing it first is a guaranteed rejection. Skipped entirely on a
+   * duplicate: unliking and liking again would otherwise let someone ring the
+   * same person's phone as often as they liked.
+   */
+  if (!error) notify('like', postId);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,10 +70,13 @@ export async function fetchComments(postId: string): Promise<CommentWithAuthor[]
 }
 
 export async function addComment(postId: string, selfId: string, body: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('comments')
-    .insert({ post_id: postId, author_id: selfId, body: body.trim() });
+    .insert({ post_id: postId, author_id: selfId, body: body.trim() })
+    .select('id')
+    .single();
   if (error) throw error;
+  notify('comment', data.id);
 }
 
 export async function deleteComment(commentId: string): Promise<void> {
