@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { SymbolView } from 'expo-symbols';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -20,9 +21,13 @@ import { SelfieSlot } from '@/components/selfie-slot';
 import { errorMessage } from '@/lib/errors';
 import { exifCoordinates, type Coordinates } from '@/lib/geo';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
-import { createAlbum, listOwnAlbums, publishPost, type PublishProgress } from '@/lib/publish';
-
-type AlbumOption = { id: string; title: string; updated_at: string };
+import {
+  createAlbum,
+  listWritableAlbums,
+  publishPost,
+  type PublishProgress,
+  type WritableAlbum,
+} from '@/lib/publish';
 
 const PROGRESS_LABEL: Record<PublishProgress, string> = {
   processing: 'Behandler bildet…',
@@ -42,7 +47,7 @@ export default function NewPostScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [albums, setAlbums] = useState<AlbumOption[]>([]);
+  const [albums, setAlbums] = useState<WritableAlbum[]>([]);
   const [albumId, setAlbumId] = useState<string | null>(null);
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
   const [progress, setProgress] = useState<PublishProgress | null>(null);
@@ -55,7 +60,7 @@ export default function NewPostScreen() {
 
   useEffect(() => {
     if (!userId) return;
-    void listOwnAlbums(userId)
+    void listWritableAlbums(userId)
       .then((rows) => {
         setAlbums(rows);
         setAlbumId((current) => current ?? rows[0]?.id ?? null);
@@ -215,8 +220,24 @@ export default function NewPostScreen() {
                       setAlbumId(album.id);
                       setNewAlbumTitle('');
                     }}
-                    className={`rounded-full px-4 py-2 ${selected ? 'bg-ink' : 'bg-glass'}`}>
+                    className={`flex-row items-center gap-1.5 rounded-full px-4 py-2 ${
+                      selected ? 'bg-ink' : 'bg-glass'
+                    }`}>
                     <Text className={selected ? 'text-canvas' : 'text-ink'}>{album.title}</Text>
+                    {/* Marked because a shared album is someone else's, and
+                        posting into one is visible to their friends too. */}
+                    {album.shared ? (
+                      <SymbolView
+                        name="person.2.fill"
+                        size={11}
+                        tintColor={selected ? '#000000' : '#b0b4ba'}
+                        fallback={
+                          <Text className={selected ? 'text-xs text-canvas' : 'text-xs text-muted'}>
+                            ··
+                          </Text>
+                        }
+                      />
+                    ) : null}
                   </Pressable>
                 );
               })}

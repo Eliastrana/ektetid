@@ -102,16 +102,50 @@ export async function publishPost(
   return data.id;
 }
 
-/** Albums the signed-in user can post into, newest first. */
-export async function listOwnAlbums(userId: string) {
-  const { data, error } = await supabase
-    .from('albums')
-    .select('id, title, updated_at')
-    .eq('owner_id', userId)
-    .order('updated_at', { ascending: false });
+export type WritableAlbum = {
+  id: string;
+  title: string;
+  updated_at: string;
+  /** Someone else owns this one and added you to it. */
+  shared: boolean;
+};
 
-  if (error) throw error;
-  return data;
+/**
+ * Albums the signed-in user can post into, newest first.
+ *
+ * Both the ones they own and the ones they have been added to. Filtering on
+ * `owner_id` alone — which this did — matched what the database allows for a
+ * personal album and nothing else: `posts_insert` authorises through
+ * `can_edit_album`, which accepts members too, so a shared album was writable
+ * the whole time but never offered as a destination.
+ *
+ * Two queries because the condition spans a join, and PostgREST has no way to
+ * express `owner_id = me OR exists (membership)` in one request. Merging two
+ * small reads is cheaper than the round trip through an RPC, and needs no
+ * migration.
+ */
+export async function listWritableAlbums(userId: string): Promise<WritableAlbum[]> {
+  const [owned, joined] = await Promise.all([
+    supabase.from('albums').select('id, title, updated_at').eq('owner_id', userId),
+    supabase.from('album_members').select('albums (id, title, updated_at)').eq('user_id', userId),
+  ]);
+
+  if (owned.error) throw owned.error;
+  if (joined.error) throw joined.error;
+
+  const albums: WritableAlbum[] = (owned.data ?? []).map((album) => ({ ...album, shared: false }));
+  const seen = new Set(albums.map((album) => album.id));
+
+  for (const row of joined.data ?? []) {
+    // An album the user both owns and is a member of would otherwise appear
+    // twice, and React would warn about the duplicate key.
+    const album = row.albums as { id: string; title: string; updated_at: string } | null;
+    if (!album || seen.has(album.id)) continue;
+    seen.add(album.id);
+    albums.push({ ...album, shared: true });
+  }
+
+  return albums.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
 export async function createAlbum(
