@@ -1,4 +1,7 @@
 import 'react-native-url-polyfill/auto';
+// Must precede createClient: auth-js checks for WebCrypto when building the
+// PKCE challenge and silently downgrades if it is absent.
+import '@/lib/crypto-polyfill';
 
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
