@@ -1,6 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { SymbolView } from 'expo-symbols';
 
 import { AlbumCard } from '@/components/album-card';
 import { useAuth } from '@/components/auth-provider';
@@ -16,10 +18,12 @@ export default function FeedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [columns, setColumns] = useState<1 | 2>(2);
 
   const load = useCallback(async () => {
+    if (!userId) return;
     try {
-      setAlbums(await fetchFeed());
+      setAlbums(await fetchFeed(userId));
       setError(null);
     } catch {
       setError('Klarte ikke å hente albumene.');
@@ -27,7 +31,7 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [userId]);
 
   // Reload on focus so a freshly published post and its unseen counts are
   // current when returning from the camera or a carousel.
@@ -43,9 +47,14 @@ export default function FeedScreen() {
         <FlatList
           data={albums}
           keyExtractor={(album) => album.id!}
-          numColumns={2}
+          numColumns={columns}
+          // Remounts the list when the count changes. FlatList cannot alter
+          // numColumns on an existing instance and warns if you try.
+          key={columns}
           contentContainerClassName="px-5 pb-32 gap-3"
-          columnWrapperClassName="gap-3"
+          // Only meaningful with more than one column, and passing it at one
+          // column wraps every row in a redundant view.
+          columnWrapperClassName={columns > 1 ? 'gap-3' : undefined}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -57,9 +66,32 @@ export default function FeedScreen() {
             />
           }
           ListHeaderComponent={
-            <View className="pb-5 pt-2">
-              <Text className="text-5xl text-ink">EkteTid</Text>
-              <Text className="mt-1 text-base text-muted">Det er tid for å være ekte</Text>
+            <View className="flex-row items-start justify-between pb-5 pt-2">
+              <View className="flex-1">
+                <Text className="text-5xl text-ink">EkteTid</Text>
+                <Text className="mt-1 text-base text-muted">Det er tid for å være ekte</Text>
+              </View>
+
+              {/* Shows the layout it switches to, not the one you are in — a
+                  control labelled with the current state reads as a status. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  columns === 2 ? 'Vis ett album per rad' : 'Vis to album per rad'
+                }
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  setColumns((current) => (current === 2 ? 1 : 2));
+                }}
+                hitSlop={8}
+                className="mt-2 h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
+                <SymbolView
+                  name={columns === 2 ? 'square.fill' : 'square.grid.2x2.fill'}
+                  size={17}
+                  tintColor="#ffffff"
+                  fallback={<Text className="text-base text-ink">▦</Text>}
+                />
+              </Pressable>
             </View>
           }
           ListEmptyComponent={
@@ -83,6 +115,7 @@ export default function FeedScreen() {
           renderItem={({ item }) => (
             <AlbumCard
               album={item}
+              wide={columns === 1}
               isOwn={item.owner_id === userId}
               onPress={(origin) =>
                 router.push({

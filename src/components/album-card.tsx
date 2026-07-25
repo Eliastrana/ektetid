@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 
 import { Scrim } from '@/components/scrim';
 import type { FeedAlbum } from '@/lib/feed';
@@ -22,6 +23,8 @@ type Props = {
    * profile, where every album is yours and the name is pure repetition.
    */
   showOwner?: boolean;
+  /** One card per row, so the cover gets the full width. */
+  wide?: boolean;
 };
 
 /**
@@ -29,7 +32,13 @@ type Props = {
  * straight off the image over a bottom dim, and a red badge counting posts you
  * have not seen.
  */
-export function AlbumCard({ album, onPress, isOwn = false, showOwner = true }: Props) {
+export function AlbumCard({
+  album,
+  onPress,
+  isOwn = false,
+  showOwner = true,
+  wide = false,
+}: Props) {
   const cardRef = useRef<View>(null);
   const unseen = isOwn ? 0 : (album.unseen_count ?? 0);
   const count = album.post_count ?? 0;
@@ -45,9 +54,15 @@ export function AlbumCard({ album, onPress, isOwn = false, showOwner = true }: P
       // maxWidth caps a lone card at half the row. With numColumns={2}, flex-1
       // otherwise stretches the last item across the full width when the count
       // is odd, which makes it enormous.
-      style={{ maxWidth: '50%' }}
+      style={wide ? undefined : { maxWidth: '50%' }}
       className="flex-1 active:opacity-90">
-      <View ref={cardRef} className="aspect-[3/4] overflow-hidden rounded-tile bg-surface">
+      <View
+        ref={cardRef}
+        className={`overflow-hidden rounded-tile bg-surface ${
+          // A full-width card at 3:4 would be taller than the screen, so the
+          // single-column layout uses a landscape crop instead.
+          wide ? 'aspect-[4/3]' : 'aspect-[3/4]'
+        }`}>
         {album.coverUrl ? (
           <Image
             source={{ uri: album.coverUrl }}
@@ -65,6 +80,14 @@ export function AlbumCard({ album, onPress, isOwn = false, showOwner = true }: P
         {album.coverUrl ? <Scrim /> : null}
 
         <View className="absolute inset-x-3 bottom-3">
+          {/*
+            Who the album belongs to, and what your relationship to it is.
+
+            Three cases share one row so every card is the same height: your
+            own, one a friend has shared with you and that you can post into,
+            and one you can only look at. Without this, a shared album was
+            indistinguishable from your own once you had posted into it.
+          */}
           {showOwner ? (
             <View className="mb-1.5 flex-row items-center gap-1.5">
               {album.owner_avatar_url ? (
@@ -80,8 +103,19 @@ export function AlbumCard({ album, onPress, isOwn = false, showOwner = true }: P
                 </View>
               )}
               <Text numberOfLines={1} className="flex-1 text-xs text-ink opacity-85">
-                {owner}
+                {isOwn ? 'Ditt album' : owner}
               </Text>
+              {album.shared && !isOwn ? (
+                <View className="flex-row items-center gap-1 rounded-full bg-glass-strong px-1.5 py-0.5">
+                  <SymbolView
+                    name="person.2.fill"
+                    size={9}
+                    tintColor="#ffffff"
+                    fallback={<Text className="text-[9px] text-ink">··</Text>}
+                  />
+                  <Text className="text-[9px] text-ink">Delt</Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 

@@ -79,7 +79,16 @@ export async function processImage(
   const rendered = await context.renderAsync();
   const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
 
-  const { blurhash, luminance } = await probe(uri);
+  /*
+   * Probed from the resized copy, not the original.
+   *
+   * The probe scales its input down to 32px, and doing that to a 12MP source
+   * meant decoding the full photo a second time — the expensive half of
+   * publishing, spent twice. A 2048px source gives the same four-by-three
+   * blurhash and the same luminance, because both are averages over a
+   * thumbnail that is far smaller than either input.
+   */
+  const { blurhash, luminance } = await probe(saved.uri);
 
   return {
     uri: saved.uri,

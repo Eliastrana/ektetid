@@ -28,17 +28,33 @@ import { setPendingCapture } from '@/lib/pending-capture';
 const SELFIE_COUNTDOWN = 3;
 
 /**
- * Back lenses we offer, in the order they appear on the zoom control.
+ * Sort the lenses the device reports into the ones we offer.
  *
- * These are AVCaptureDevice identifiers. Telephoto is deliberately left out:
- * its magnification varies by model — 2x on some iPhones, 5x on others — so
- * there is no honest fixed label for it, and mislabelling a zoom level is
- * worse than not offering it.
+ * `selectedLens` is matched against `AVCaptureDevice.localizedName` — not the
+ * device type — so the values coming back are display strings like "Back Ultra
+ * Wide Camera", and they are translated on a non-English phone. Passing the
+ * AVFoundation identifier `builtInUltraWideCamera`, as this used to, matched
+ * nothing: the filter emptied the list, the control never rendered, and 0,5
+ * was unreachable.
+ *
+ * Matching on "ultra" survives translation, since the term is a loanword in
+ * the languages this ships in. Telephoto is deliberately left out: its
+ * magnification varies by model — 2x on some iPhones, 5x on others — so there
+ * is no honest fixed label, and mislabelling a zoom level is worse than not
+ * offering it.
  */
-const BACK_LENSES: { id: string; label: string }[] = [
-  { id: 'builtInUltraWideCamera', label: '0,5' },
-  { id: 'builtInWideAngleCamera', label: '1' },
-];
+function backLensOptions(lenses: string[]): { id: string; label: string }[] {
+  const ultraWide = lenses.find((lens) => lens.toLowerCase().includes('ultra'));
+  const wide = lenses.find((lens) => {
+    const name = lens.toLowerCase();
+    return !name.includes('ultra') && !name.includes('tele');
+  });
+
+  const options: { id: string; label: string }[] = [];
+  if (ultraWide) options.push({ id: ultraWide, label: '0,5' });
+  if (wide) options.push({ id: wide, label: '1' });
+  return options;
+}
 
 export default function CameraScreen() {
   const router = useRouter();
@@ -56,12 +72,13 @@ export default function CameraScreen() {
   // Lens selection is iOS-only; on Android onAvailableLensesChanged never
   // fires, so the control simply never appears.
   const [availableLenses, setAvailableLenses] = useState<string[]>([]);
-  const [backLens, setBackLens] = useState('builtInWideAngleCamera');
+  // Null until the device says what it has. Naming a lens up front would mean
+  // guessing a localized string, and a name that matches nothing is ignored.
+  const [backLens, setBackLens] = useState<string | null>(null);
 
   // Only the back camera has an ultra-wide, so the control is hidden while the
   // front one is active — including mid-capture, when we flip for the selfie.
-  const zoomOptions =
-    facing === 'back' ? BACK_LENSES.filter((lens) => availableLenses.includes(lens.id)) : [];
+  const zoomOptions = facing === 'back' ? backLensOptions(availableLenses) : [];
 
   const capturePair = useCallback(async () => {
     if (stage !== 'idle') return;
@@ -190,10 +207,20 @@ export default function CameraScreen() {
         animateShutter={false}
         // Passing a back-camera lens while the front is active would ask for a
         // device that does not exist on this side.
-        selectedLens={facing === 'back' ? backLens : undefined}
+        selectedLens={facing === 'back' ? (backLens ?? undefined) : undefined}
+        // Mirrored, so the selfie is saved the way you saw yourself compose it.
+        // The takePictureAsync option of the same name is deprecated in SDK 57.
+        mirror
         onAvailableLensesChanged={({ lenses }) => {
           console.log('[kamera] lenses:', lenses.join(', '));
           setAvailableLenses(lenses);
+          // Settle on the plain wide lens once the names are known, so the
+          // control starts on 1 rather than on whatever the system defaulted to.
+          setBackLens((current) => {
+            if (current && lenses.includes(current)) return current;
+            const options = backLensOptions(lenses);
+            return options.find((lens) => lens.label === '1')?.id ?? null;
+          });
         }}
         onCameraReady={() => {
           console.log('[kamera] camera ready, facing:', facing);
@@ -236,23 +263,32 @@ export default function CameraScreen() {
             </Pressable>
           </View>
 
-          {/* Counting down before the selfie. Keyed on the number so each tick
-              animates in on its own rather than the text simply changing. */}
+          {/*
+            Counting down before the selfie.
+
+            Only the digit is keyed. Keying the whole block, as this used to,
+            tore down the circle and the instruction on every tick and played
+            their entrances again — so the text flashed once a second, which
+            reads as a glitch rather than as a countdown. The frame stays put
+            and just the number changes inside it.
+          */}
           {countdown !== null ? (
             <Animated.View
-              key={countdown}
-              entering={ZoomIn.duration(220).easing(Easing.out(Easing.cubic))}
+              entering={FadeIn.duration(160)}
               exiting={FadeOut.duration(180)}
               pointerEvents="none"
               className="absolute inset-0 items-center justify-center">
               <View className="h-32 w-32 items-center justify-center rounded-full bg-overlay">
-                <Text className="text-7xl text-ink">{countdown}</Text>
+                {/* No exit animation: the outgoing digit would sit alongside
+                    the incoming one and shunt it off centre. */}
+                <Animated.Text
+                  key={countdown}
+                  entering={ZoomIn.duration(220).easing(Easing.out(Easing.cubic))}
+                  className="text-7xl text-ink">
+                  {countdown}
+                </Animated.Text>
               </View>
-              <Animated.Text
-                entering={FadeIn.duration(200)}
-                className="mt-4 text-base text-ink">
-                Se på kameraet
-              </Animated.Text>
+              <Text className="mt-4 text-base text-ink">Se på kameraet</Text>
             </Animated.View>
           ) : null}
 

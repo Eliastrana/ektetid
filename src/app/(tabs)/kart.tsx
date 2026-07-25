@@ -160,7 +160,12 @@ export default function MapScreen() {
       )}
 
       <Screen className="absolute inset-0" edges={['top', 'bottom']} pointerEvents="box-none">
-        <View className="flex-row items-start justify-between px-5 pt-2" pointerEvents="box-none">
+        {/*
+          Stacked, not side by side. Beside the title the filter sat over the
+          top-right corner of the map, which is where Apple puts the locate
+          button — so the control the user needed was underneath ours.
+        */}
+        <View className="items-start gap-3 px-5 pt-2" pointerEvents="box-none">
           <View pointerEvents="none">
             <Text className="text-3xl text-ink">Kart</Text>
             {posts.length > 0 ? (
