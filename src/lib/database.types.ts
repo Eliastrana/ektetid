@@ -405,6 +405,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           id: string | null
+          last_post_at: string | null
           owner_avatar_url: string | null
           owner_display_name: string | null
           owner_id: string | null

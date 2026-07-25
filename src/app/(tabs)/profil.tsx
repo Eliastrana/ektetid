@@ -157,7 +157,11 @@ export default function ProfileScreen() {
             )
           }
           renderItem={({ item }) => (
-            <AlbumCard album={item} onPress={() => router.push(`/album/${item.id}`)} />
+            <AlbumCard
+              album={item}
+              showOwner={false}
+              onPress={() => router.push(`/album/${item.id}`)}
+            />
           )}
         />
       </Screen>

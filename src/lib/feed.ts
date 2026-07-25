@@ -16,7 +16,10 @@ export async function fetchFeed(): Promise<FeedAlbum[]> {
   const { data, error } = await supabase
     .from('album_feed')
     .select('*')
-    .order('updated_at', { ascending: false });
+    // Newest post first, so an album someone added to five minutes ago outranks
+    // one they last touched a month back — regardless of whose album it is.
+    // Empty albums have no last_post_at and fall to the bottom.
+    .order('last_post_at', { ascending: false, nullsFirst: false });
 
   if (error) throw error;
 

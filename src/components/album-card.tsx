@@ -7,21 +7,26 @@ import type { FeedAlbum } from '@/lib/feed';
 type Props = {
   album: FeedAlbum;
   onPress: () => void;
+  /** Hide the owner row where it is redundant, e.g. your own profile. */
+  showOwner?: boolean;
 };
 
 /**
  * The album cover from the original grid: a tall photo with its title reading
- * straight off the image, over a bottom dim, and a red badge counting posts
- * you have not seen.
+ * straight off the image over a bottom dim, and a red badge counting posts you
+ * have not seen.
  */
-export function AlbumCard({ album, onPress }: Props) {
+export function AlbumCard({ album, onPress, showOwner = true }: Props) {
   const unseen = album.unseen_count ?? 0;
   const count = album.post_count ?? 0;
+  const owner = album.owner_display_name ?? album.owner_username ?? '';
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${album.title}, ${count} bilder${unseen > 0 ? `, ${unseen} nye` : ''}`}
+      accessibilityLabel={`${album.title}${showOwner ? ` av ${owner}` : ''}, ${count} bilder${
+        unseen > 0 ? `, ${unseen} nye` : ''
+      }`}
       onPress={onPress}
       // maxWidth caps a lone card at half the row. With numColumns={2}, flex-1
       // otherwise stretches the last item across the full width when the count
@@ -46,17 +51,32 @@ export function AlbumCard({ album, onPress }: Props) {
         {album.coverUrl ? <Scrim /> : null}
 
         <View className="absolute inset-x-3 bottom-3">
+          {showOwner ? (
+            <View className="mb-1.5 flex-row items-center gap-1.5">
+              {album.owner_avatar_url ? (
+                <Image
+                  source={{ uri: album.owner_avatar_url }}
+                  style={{ width: 18, height: 18, borderRadius: 9 }}
+                />
+              ) : (
+                <View className="h-[18px] w-[18px] items-center justify-center rounded-full bg-glass-strong">
+                  <Text className="text-[9px] text-ink">
+                    {owner.trim().charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text numberOfLines={1} className="flex-1 text-xs text-ink opacity-85">
+                {owner}
+              </Text>
+            </View>
+          ) : null}
+
           <View className="flex-row items-end justify-between gap-2">
             <Text numberOfLines={1} className="flex-1 text-base text-ink">
               {album.title}
             </Text>
             <Text className="text-xs text-ink opacity-70">{count}</Text>
           </View>
-          {album.description ? (
-            <Text numberOfLines={1} className="mt-0.5 text-xs text-ink opacity-70">
-              {album.description}
-            </Text>
-          ) : null}
         </View>
       </View>
 
