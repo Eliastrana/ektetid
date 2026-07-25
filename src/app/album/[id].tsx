@@ -14,10 +14,12 @@ import Animated, {
 
 import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
+import { ReportSheet } from '@/components/report-sheet';
 import { PostTile } from '@/components/post-tile';
 import { Screen } from '@/components/screen';
 import { StoryProgress } from '@/components/story-progress';
 import { fetchAlbum, markAlbumRead, type AlbumDetail } from '@/lib/album';
+import type { ReportTarget } from '@/lib/moderation';
 import { fetchLikes, toggleLike, type LikeState } from '@/lib/social';
 
 /** Idle time before the chrome fades away, matching the original's 5s. */
@@ -48,6 +50,7 @@ export default function AlbumScreen() {
   const [error, setError] = useState<string | null>(null);
   const [likes, setLikes] = useState<LikeState>({ count: 0, likedByMe: false });
   const [showComments, setShowComments] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -340,6 +343,23 @@ export default function AlbumScreen() {
               className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
               <Text className="text-xl">💬</Text>
             </Pressable>
+
+            {/* Reporting your own post is meaningless, so it is hidden there. */}
+            {current && session && current.author_id !== session.user.id ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Rapporter innlegg"
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  setReportTarget({
+                    reportedUserId: current.author_id,
+                    postId: current.id,
+                  });
+                }}
+                className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                <Text className="text-xl text-ink">⋯</Text>
+              </Pressable>
+            ) : null}
           </Animated.View>
 
           {current ? (
@@ -355,6 +375,20 @@ export default function AlbumScreen() {
           ) : null}
         </View>
       </Screen>
+
+      {session ? (
+        <ReportSheet
+          selfId={session.user.id}
+          target={reportTarget}
+          onClose={() => setReportTarget(null)}
+          onDone={() => {
+            setReportTarget(null);
+            // A block revokes access to the whole album, so leaving is the
+            // only sensible next state.
+            router.back();
+          }}
+        />
+      ) : null}
 
       {current && session ? (
         <CommentSheet

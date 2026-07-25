@@ -330,6 +330,71 @@ export type Database = {
           },
         ]
       }
+      reports: {
+        Row: {
+          comment_id: string | null
+          created_at: string
+          details: string | null
+          id: string
+          post_id: string | null
+          reason: Database["public"]["Enums"]["report_reason"]
+          reported_user_id: string
+          reporter_id: string
+          resolved: boolean
+        }
+        Insert: {
+          comment_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string | null
+          reason: Database["public"]["Enums"]["report_reason"]
+          reported_user_id: string
+          reporter_id: string
+          resolved?: boolean
+        }
+        Update: {
+          comment_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string | null
+          reason?: Database["public"]["Enums"]["report_reason"]
+          reported_user_id?: string
+          reporter_id?: string
+          resolved?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reported_user_id_fkey"
+            columns: ["reported_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       album_feed: {
@@ -405,6 +470,7 @@ export type Database = {
     }
     Enums: {
       friendship_status: "pending" | "accepted" | "blocked"
+      report_reason: "spam" | "harassment" | "nudity" | "violence" | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -533,12 +599,14 @@ export const Constants = {
   public: {
     Enums: {
       friendship_status: ["pending", "accepted", "blocked"],
+      report_reason: ["spam", "harassment", "nudity", "violence", "other"],
     },
   },
 } as const
 
 
 export type FriendshipStatus = Database['public']['Enums']['friendship_status'];
+export type ReportReason = Database['public']['Enums']['report_reason'];
 export type AlbumFeedRow = Database['public']['Views']['album_feed']['Row'];
 export type Profile = Tables<'profiles'>;
 export type Album = Tables<'albums'>;
