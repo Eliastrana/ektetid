@@ -3,7 +3,14 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Dimensions,
+  InteractionManager,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -65,7 +72,11 @@ export default function AlbumScreen() {
    * card enlarging rather than a new screen sliding in. Without an origin —
    * opened from a deep link, say — it falls back to a plain fade.
    */
-  const origin = useMemo(() => decodeOrigin(params), [params]);
+  // Memoised on the primitives, not on `params`: useLocalSearchParams returns a
+  // fresh object every render, so depending on it produced a new `origin` each
+  // time and restarted the entry animation on every re-render.
+  const { ox, oy, ow, oh } = params;
+  const origin = useMemo(() => decodeOrigin({ ox, oy, ow, oh }), [ox, oy, ow, oh]);
   const genie = useSharedValue(origin ? 0 : 1);
 
   const genieStyle = useAnimatedStyle(() => {
@@ -99,14 +110,22 @@ export default function AlbumScreen() {
   useEffect(() => {
     if (!id) return;
     let active = true;
+
+    // The request starts immediately, but the state lands after the opening
+    // animation. Applying it mid-flight mounts the full-screen image, the
+    // progress bar and the tile all at once, and that render is long enough to
+    // drop frames in the middle of the transition.
     void fetchAlbum(id)
       .then((detail) => {
         if (!active) return;
-        setAlbum(detail);
-        // Resume where the user left off, as the original did via localStorage.
-        setIndex(
-          Math.min(Math.max(detail.lastSeenPosition, 0), Math.max(detail.posts.length - 1, 0))
-        );
+        InteractionManager.runAfterInteractions(() => {
+          if (!active) return;
+          setAlbum(detail);
+          // Resume where the user left off, as the original did via localStorage.
+          setIndex(
+            Math.min(Math.max(detail.lastSeenPosition, 0), Math.max(detail.posts.length - 1, 0))
+          );
+        });
       })
       .catch(() => {
         if (active) setError('Klarte ikke å åpne albumet.');
