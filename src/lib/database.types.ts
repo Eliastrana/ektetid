@@ -15,6 +15,56 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      album_members: {
+        Row: {
+          added_by: string
+          album_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          added_by: string
+          album_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          added_by?: string
+          album_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "album_members_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "album_members_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "album_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "album_members_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "albums"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "album_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       album_reads: {
         Row: {
           album_id: string
@@ -434,6 +484,7 @@ export type Database = {
     }
     Functions: {
       are_friends: { Args: { a: string; b: string }; Returns: boolean }
+      can_edit_album: { Args: { album: string }; Returns: boolean }
       can_see_album: { Args: { album: string }; Returns: boolean }
       can_see_post: { Args: { post: string }; Returns: boolean }
       create_post: {
@@ -476,8 +527,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      is_album_member: {
+        Args: { album: string; who: string }
+        Returns: boolean
+      }
       is_blocked: { Args: { a: string; b: string }; Returns: boolean }
       owns_album: { Args: { album: string }; Returns: boolean }
+      reorder_album: {
+        Args: { p_album_id: string; p_post_ids: string[] }
+        Returns: undefined
+      }
+      shares_album_with: { Args: { a: string; b: string }; Returns: boolean }
     }
     Enums: {
       friendship_status: "pending" | "accepted" | "blocked"

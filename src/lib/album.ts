@@ -2,9 +2,12 @@ import type { Post } from '@/lib/database.types';
 import { signedUrls } from '@/lib/images';
 import { supabase } from '@/lib/supabase';
 
+export type PostAuthor = { id: string; username: string; display_name: string | null; avatar_url: string | null };
+
 export type AlbumPost = Post & {
   imageUrl: string | null;
   selfieUrl: string | null;
+  author: PostAuthor | null;
 };
 
 export type AlbumDetail = {
@@ -14,6 +17,10 @@ export type AlbumDetail = {
   ownerId: string;
   posts: AlbumPost[];
   lastSeenPosition: number;
+  /** True once the album has collaborators, which is when authorship matters. */
+  isShared: boolean;
+  /** Whether the viewer may add to or edit this album. */
+  canEdit: boolean;
 };
 
 /**
@@ -25,10 +32,17 @@ export type AlbumDetail = {
  * query is both simpler and faster.
  */
 export async function fetchAlbum(albumId: string): Promise<AlbumDetail> {
-  const [albumResult, postsResult, readResult] = await Promise.all([
+  const [albumResult, postsResult, readResult, membersResult] = await Promise.all([
     supabase.from('albums').select('id, title, description, owner_id').eq('id', albumId).single(),
-    supabase.from('posts').select('*').eq('album_id', albumId).order('position'),
+    supabase
+      .from('posts')
+      .select(
+        '*, author:profiles!posts_author_id_fkey(id, username, display_name, avatar_url)'
+      )
+      .eq('album_id', albumId)
+      .order('position'),
     supabase.from('album_reads').select('last_seen_position').eq('album_id', albumId).maybeSingle(),
+    supabase.from('album_members').select('user_id').eq('album_id', albumId),
   ]);
 
   if (albumResult.error) throw albumResult.error;
@@ -39,16 +53,25 @@ export async function fetchAlbum(albumId: string): Promise<AlbumDetail> {
   );
   const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
 
+  const members = membersResult.data ?? [];
+  const { data: userData } = await supabase.auth.getUser();
+  const selfId = userData.user?.id;
+
   return {
     id: albumResult.data.id,
     title: albumResult.data.title,
     description: albumResult.data.description,
     ownerId: albumResult.data.owner_id,
     lastSeenPosition: readResult.data?.last_seen_position ?? -1,
+    isShared: members.length > 0,
+    canEdit:
+      !!selfId &&
+      (albumResult.data.owner_id === selfId || members.some((m) => m.user_id === selfId)),
     posts: postsResult.data.map((post) => ({
       ...post,
       imageUrl: urls.get(post.image_path) ?? null,
       selfieUrl: post.selfie_path ? (urls.get(post.selfie_path) ?? null) : null,
+      author: (post.author ?? null) as unknown as PostAuthor | null,
     })),
   };
 }

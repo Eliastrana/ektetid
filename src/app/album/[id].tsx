@@ -424,6 +424,22 @@ export default function AlbumScreen() {
             <Text numberOfLines={1} className="ml-3 flex-1 text-right text-base text-ink">
               {album.title}
             </Text>
+
+            {album.canEdit ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Rediger album"
+                onPress={() => router.push(`/rediger-album/${album.id}`)}
+                hitSlop={8}
+                className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
+                <SymbolView
+                  name="slider.horizontal.3"
+                  size={17}
+                  tintColor="#ffffff"
+                  fallback={<Text className="text-lg text-ink">⋯</Text>}
+                />
+              </Pressable>
+            ) : null}
           </View>
         </Animated.View>
 
@@ -498,6 +514,7 @@ export default function AlbumScreen() {
           {current ? (
             <PostTile
               post={current}
+              showAuthor={album.isShared}
               expanded={expanded}
               onToggle={() => {
                 void Haptics.selectionAsync();

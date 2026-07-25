@@ -16,6 +16,11 @@ type Props = {
   post: AlbumPost;
   expanded: boolean;
   onToggle: () => void;
+  /**
+   * Attribute the photo. Only meaningful in a shared album — in a personal one
+   * every post is the owner's, so the name would be noise on every frame.
+   */
+  showAuthor?: boolean;
 };
 
 const MONTHS = [
@@ -54,7 +59,7 @@ function formatNorwegianDate(iso: string): string {
  * Text is always white here — the scrim guarantees a dark backdrop, so the
  * per-post luminance is not needed to choose a colour.
  */
-export function PostTile({ post, expanded, onToggle }: Props) {
+export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props) {
   const hasDetail = !!post.description || !!post.selfieUrl;
   const progress = useSharedValue(expanded ? 1 : 0);
 
@@ -86,6 +91,20 @@ export function PostTile({ post, expanded, onToggle }: Props) {
               style={{ textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 }}>
               {post.title}
             </Text>
+          ) : null}
+
+          {showAuthor && post.author ? (
+            <View className="mt-1 flex-row items-center gap-1.5">
+              {post.author.avatar_url ? (
+                <Image
+                  source={{ uri: post.author.avatar_url }}
+                  style={{ width: 18, height: 18, borderRadius: 9 }}
+                />
+              ) : null}
+              <Text className="text-sm text-ink opacity-90">
+                {post.author.display_name ?? post.author.username}
+              </Text>
+            </View>
           ) : null}
 
           <View className="mt-1 flex-row items-center gap-2">

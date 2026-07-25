@@ -57,6 +57,7 @@ function RootNavigator() {
         <Stack.Screen name="album/[id]" options={{ animation: 'none' }} />
         <Stack.Screen name="venner" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="profil/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="rediger-album/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="innstillinger" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen
           name="nytt-innlegg"
