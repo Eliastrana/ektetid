@@ -16,6 +16,7 @@ import {
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { SelfieSlot } from '@/components/selfie-slot';
 import { errorMessage } from '@/lib/errors';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
 import { createAlbum, listOwnAlbums, publishPost, type PublishProgress } from '@/lib/publish';
@@ -34,6 +35,9 @@ export default function NewPostScreen() {
   const userId = session?.user.id;
 
   const [capture] = useState(getPendingCapture);
+  const [selfieUri, setSelfieUri] = useState<string | null>(
+    () => getPendingCapture()?.selfieUri ?? null
+  );
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -90,7 +94,7 @@ export default function NewPostScreen() {
 
       await publishPost(
         {
-          capture,
+          capture: { ...capture, selfieUri },
           albumId: targetAlbum,
           title,
           description,
@@ -109,7 +113,18 @@ export default function NewPostScreen() {
     } finally {
       setProgress(null);
     }
-  }, [albumId, capture, description, location, newAlbumTitle, progress, router, title, userId]);
+  }, [
+    albumId,
+    capture,
+    description,
+    location,
+    newAlbumTitle,
+    progress,
+    router,
+    selfieUri,
+    title,
+    userId,
+  ]);
 
   if (!capture) {
     return (
@@ -138,13 +153,7 @@ export default function NewPostScreen() {
                 style={{ flex: 1, aspectRatio: 3 / 4, borderRadius: 12 }}
                 contentFit="cover"
               />
-              {capture.selfieUri ? (
-                <Image
-                  source={{ uri: capture.selfieUri }}
-                  style={{ width: 96, aspectRatio: 3 / 4, borderRadius: 12 }}
-                  contentFit="cover"
-                />
-              ) : null}
+              <SelfieSlot uri={selfieUri} onChange={setSelfieUri} />
             </View>
 
             <TextInput
