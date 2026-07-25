@@ -1,98 +1,165 @@
-import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { AlbumCard } from '@/components/album-card';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
-import { signOut } from '@/lib/auth';
-import { deleteAccount } from '@/lib/moderation';
+import {
+  fetchOwnAlbums,
+  fetchProfileStats,
+  type OwnAlbum,
+  type ProfileStats,
+} from '@/lib/profile';
+
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <View className="flex-1 items-center">
+      <Text className="text-2xl text-ink">{value}</Text>
+      <Text className="mt-0.5 text-xs text-muted">{label}</Text>
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile } = useAuth();
-  const [deleting, setDeleting] = useState(false);
+  const { profile, session } = useAuth();
+  const userId = session?.user.id;
 
-  /**
-   * App Store guideline 5.1.1(v) requires account deletion to be reachable
-   * from inside the app. It is genuinely irreversible — every album, post and
-   * photo goes — so it asks twice and names what will be lost.
-   */
-  function confirmDelete() {
-    Alert.alert(
-      'Slette kontoen?',
-      'Alle albumene, bildene og kommentarene dine blir slettet for godt. Dette kan ikke angres.',
-      [
-        { text: 'Avbryt', style: 'cancel' },
-        {
-          text: 'Slett kontoen',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Helt sikker?', 'Siste sjanse. Kontoen kan ikke gjenopprettes.', [
-              { text: 'Avbryt', style: 'cancel' },
-              {
-                text: 'Ja, slett alt',
-                style: 'destructive',
-                onPress: async () => {
-                  setDeleting(true);
-                  try {
-                    await deleteAccount();
-                    await Haptics.notificationAsync(
-                      Haptics.NotificationFeedbackType.Success
-                    );
-                  } catch {
-                    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                    Alert.alert(
-                      'Klarte ikke å slette',
-                      'Noe gikk galt. Prøv igjen, eller kontakt oss.'
-                    );
-                  } finally {
-                    setDeleting(false);
-                  }
-                },
-              },
-            ]);
-          },
-        },
-      ]
-    );
-  }
+  const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [albums, setAlbums] = useState<OwnAlbum[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const [nextStats, nextAlbums] = await Promise.all([
+        fetchProfileStats(userId),
+        fetchOwnAlbums(userId),
+      ]);
+      setStats(nextStats);
+      setAlbums(nextAlbums);
+    } catch {
+      // Keep whatever is on screen; the pull-to-refresh is the retry.
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [userId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
+
+  const initials = (profile?.display_name ?? profile?.username ?? '?')
+    .trim()
+    .charAt(0)
+    .toUpperCase();
 
   return (
     <View className="flex-1 bg-canvas">
-      <Screen className="flex-1 justify-between px-5 py-4">
-        <View>
-          <Text className="text-4xl text-ink">{profile?.display_name ?? 'Profil'}</Text>
-          <Text className="mt-1 text-base text-muted">@{profile?.username}</Text>
-        </View>
+      <Screen className="flex-1" edges={['top']}>
+        <FlatList
+          data={albums}
+          keyExtractor={(album) => album.id!}
+          numColumns={2}
+          contentContainerClassName="px-5 pb-8 gap-3"
+          columnWrapperClassName="gap-3"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void load();
+              }}
+              tintColor="#ffffff"
+            />
+          }
+          ListHeaderComponent={
+            <View className="pb-5">
+              <View className="flex-row items-center justify-end pt-2">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Innstillinger"
+                  onPress={() => router.push('/innstillinger')}
+                  hitSlop={10}
+                  className="h-11 w-11 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                  <SymbolView
+                    name="gearshape.fill"
+                    size={20}
+                    tintColor="#ffffff"
+                    fallback={<Text className="text-lg text-ink">⚙</Text>}
+                  />
+                </Pressable>
+              </View>
 
-        <View className="gap-3">
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/venner')}
-            className="h-14 items-center justify-center rounded-tile border border-glass-border bg-glass active:bg-glass-strong">
-            <Text className="text-base text-ink">Venner</Text>
-          </Pressable>
+              <View className="mt-2 flex-row items-center gap-4">
+                {profile?.avatar_url ? (
+                  <Image
+                    source={{ uri: profile.avatar_url }}
+                    style={{ width: 72, height: 72, borderRadius: 36 }}
+                  />
+                ) : (
+                  <View className="h-18 w-18 items-center justify-center rounded-full border border-glass-border bg-glass">
+                    <Text className="text-2xl text-ink">{initials}</Text>
+                  </View>
+                )}
+                <View className="flex-1">
+                  <Text numberOfLines={1} className="text-3xl text-ink">
+                    {profile?.display_name ?? profile?.username ?? 'Profil'}
+                  </Text>
+                  <Text className="text-base text-muted">@{profile?.username}</Text>
+                </View>
+              </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void signOut()}
-            className="h-14 items-center justify-center rounded-tile active:opacity-80">
-            <Text className="text-base text-muted">Logg ut</Text>
-          </Pressable>
+              <View className="mt-6 flex-row rounded-tile border border-glass-border bg-glass py-4">
+                <Stat value={stats?.posts ?? 0} label="bilder" />
+                <Stat value={stats?.albums ?? 0} label="album" />
+                <Stat value={stats?.heartsReceived ?? 0} label="hjerter" />
+              </View>
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={deleting}
-            onPress={confirmDelete}
-            className="h-14 items-center justify-center rounded-tile active:opacity-80">
-            {deleting ? (
-              <ActivityIndicator color="#ff3b30" />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/venner')}
+                className="mt-3 h-14 flex-row items-center justify-between rounded-tile border border-glass-border bg-glass px-4 active:bg-glass-strong">
+                <Text className="text-base text-ink">Venner</Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-base text-muted">{stats?.friends ?? 0}</Text>
+                  <SymbolView
+                    name="chevron.right"
+                    size={14}
+                    tintColor="#6b6f76"
+                    fallback={<Text className="text-base text-muted">›</Text>}
+                  />
+                </View>
+              </Pressable>
+
+              <Text className="mb-1 mt-7 text-sm text-muted">Albumene dine</Text>
+            </View>
+          }
+          ListEmptyComponent={
+            loading ? (
+              <View className="items-center py-10">
+                <ActivityIndicator color="#ffffff" />
+              </View>
             ) : (
-              <Text className="text-base text-alert">Slett kontoen min</Text>
-            )}
-          </Pressable>
-        </View>
+              <View className="items-center gap-2 py-10">
+                <Text className="text-base text-ink">Ingen album ennå</Text>
+                <Text className="text-center text-sm text-muted">
+                  Ta ditt første bilde, så dukker det opp her.
+                </Text>
+              </View>
+            )
+          }
+          renderItem={({ item }) => (
+            <AlbumCard album={item} onPress={() => router.push(`/album/${item.id}`)} />
+          )}
+        />
       </Screen>
     </View>
   );

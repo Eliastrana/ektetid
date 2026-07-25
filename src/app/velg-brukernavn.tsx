@@ -62,7 +62,7 @@ export default function ChooseUsernameScreen() {
               selectionColor="#ffffff"
               onSubmitEditing={submit}
               returnKeyType="done"
-              className="h-14 flex-1 pl-1 text-xl text-ink"
+              className="h-14 flex-1 pl-1 text-xl leading-none text-ink"
             />
           </View>
 

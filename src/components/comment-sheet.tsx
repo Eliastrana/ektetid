@@ -161,7 +161,7 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                   maxLength={2000}
                   onSubmitEditing={send}
                   returnKeyType="send"
-                  className="h-12 flex-1 rounded-full bg-glass px-4 text-base text-ink"
+                  className="h-12 flex-1 rounded-full bg-glass px-4 text-base leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"

@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
@@ -166,7 +167,12 @@ export default function CameraScreen() {
       */}
       <View className="absolute inset-0">
         <Screen className="flex-1 justify-between">
-          <View className="flex-row justify-end px-5 pt-2">
+          <View className="flex-row items-center justify-end gap-2 px-5 pt-2">
+            {/* Labelled, because a bare icon does not say whether it is the
+                current state or the action it would take. */}
+            <Text className="text-sm text-ink">
+              {flash === 'off' ? 'Blits av' : 'Blits auto'}
+            </Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={flash === 'off' ? 'Slå på blits' : 'Slå av blits'}
@@ -174,8 +180,14 @@ export default function CameraScreen() {
                 void Haptics.selectionAsync();
                 setFlash((current) => (current === 'off' ? 'auto' : 'off'));
               }}
-              className="h-12 w-12 items-center justify-center rounded-full border border-glass-border bg-glass">
-              <Text className="text-lg text-ink">{flash === 'off' ? '○' : '●'}</Text>
+              hitSlop={8}
+              className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+              <SymbolView
+                name={flash === 'off' ? 'bolt.slash.fill' : 'bolt.fill'}
+                size={26}
+                tintColor="#ffffff"
+                fallback={<Text className="text-2xl text-ink">⚡︎</Text>}
+              />
             </Pressable>
           </View>
 
@@ -207,8 +219,14 @@ export default function CameraScreen() {
                 accessibilityLabel="Velg fra kamerarullen"
                 disabled={busy}
                 onPress={pickFromLibrary}
-                className="h-12 w-12 items-center justify-center rounded-full border border-glass-border bg-glass">
-                <Text className="text-lg text-ink">▤</Text>
+                hitSlop={10}
+                className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                <SymbolView
+                  name="photo.on.rectangle"
+                  size={26}
+                  tintColor="#ffffff"
+                  fallback={<Text className="text-2xl text-ink">▤</Text>}
+                />
               </Pressable>
 
               <Pressable
@@ -232,8 +250,14 @@ export default function CameraScreen() {
                   void Haptics.selectionAsync();
                   setFacing((current) => (current === 'back' ? 'front' : 'back'));
                 }}
-                className="h-12 w-12 items-center justify-center rounded-full border border-glass-border bg-glass">
-                <Text className="text-lg text-ink">⟳</Text>
+                hitSlop={10}
+                className="h-14 w-14 items-center justify-center rounded-full border border-glass-border bg-glass active:bg-glass-strong">
+                <SymbolView
+                  name="arrow.triangle.2.circlepath.camera.fill"
+                  size={26}
+                  tintColor="#ffffff"
+                  fallback={<Text className="text-2xl text-ink">⟳</Text>}
+                />
               </Pressable>
             </View>
           </View>

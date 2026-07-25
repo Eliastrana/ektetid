@@ -54,6 +54,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="album/[id]" options={{ animation: 'fade' }} />
         <Stack.Screen name="venner" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="innstillinger" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen
           name="nytt-innlegg"
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}

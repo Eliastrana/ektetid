@@ -153,7 +153,7 @@ export default function NewPostScreen() {
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
               maxLength={80}
-              className="mt-5 h-14 rounded-tile border border-glass-border bg-glass px-4 text-xl text-ink"
+              className="mt-5 h-14 rounded-tile border border-glass-border bg-glass px-4 text-xl leading-none text-ink"
             />
 
             <TextInput
@@ -174,7 +174,7 @@ export default function NewPostScreen() {
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
               maxLength={80}
-              className="mt-3 h-14 rounded-tile border border-glass-border bg-glass px-4 text-base text-ink"
+              className="mt-3 h-14 rounded-tile border border-glass-border bg-glass px-4 text-base leading-none text-ink"
             />
 
             <Text className="mb-2 mt-6 text-sm text-muted">Album</Text>
@@ -209,7 +209,7 @@ export default function NewPostScreen() {
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
               maxLength={60}
-              className="mt-3 h-14 rounded-tile border border-glass-border bg-glass px-4 text-base text-ink"
+              className="mt-3 h-14 rounded-tile border border-glass-border bg-glass px-4 text-base leading-none text-ink"
             />
 
             {error ? <Text className="mt-4 text-sm text-alert">{error}</Text> : null}

@@ -87,7 +87,7 @@ export default function SignInScreen() {
                   placeholder="000000"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile border border-glass-border bg-glass text-center text-2xl tracking-[8px] text-ink"
+                  className="h-14 rounded-tile border border-glass-border bg-glass text-center text-2xl leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"
@@ -159,7 +159,7 @@ export default function SignInScreen() {
                   placeholder="din@epost.no"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile border border-glass-border bg-glass px-4 text-base text-ink"
+                  className="h-14 rounded-tile border border-glass-border bg-glass px-4 text-base leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"

@@ -140,7 +140,7 @@ export default function FriendsScreen() {
             placeholder="Søk etter brukernavn"
             placeholderTextColor="#6b6f76"
             selectionColor="#ffffff"
-            className="h-12 rounded-tile border border-glass-border bg-glass px-4 text-base text-ink"
+            className="h-12 rounded-tile border border-glass-border bg-glass px-4 text-base leading-none text-ink"
           />
           {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
         </View>
