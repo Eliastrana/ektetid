@@ -11,16 +11,21 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import Animated, { Easing, FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 import { Screen } from '@/components/screen';
 import { setPendingCapture } from '@/lib/pending-capture';
 
 /**
- * Time given to the front camera to mount and settle its exposure before the
- * second shot. expo-camera cannot drive both lenses at once, so the "both
- * sides" pair is captured sequentially, as BeReal itself originally did.
+ * Seconds counted down before the selfie is taken.
+ *
+ * expo-camera cannot drive both lenses at once, so the pair is captured
+ * sequentially. The gap used to be a silent 900ms, which meant being
+ * photographed before you had registered that the camera had flipped. The
+ * countdown gives you time to see yourself and react — and it comfortably
+ * covers the exposure settling the delay was originally there for.
  */
-const LENS_SETTLE_MS = 900;
+const SELFIE_COUNTDOWN = 3;
 
 /**
  * Back lenses we offer, in the order they appear on the zoom control.
@@ -46,6 +51,7 @@ export default function CameraScreen() {
   const [preview, setPreview] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   // Lens selection is iOS-only; on Android onAvailableLensesChanged never
   // fires, so the control simply never appears.
@@ -76,10 +82,18 @@ export default function CameraScreen() {
 
       setPreview(main.uri);
 
-      // Flip and let the front lens settle before the second frame.
       setStage('selfie');
       setFacing('front');
-      await new Promise((resolve) => setTimeout(resolve, LENS_SETTLE_MS));
+
+      // Count down visibly, one tick per second, so the shot is never a
+      // surprise. The haptic matters as much as the number: it lands even if
+      // you are looking at your own face rather than the digit.
+      for (let remaining = SELFIE_COUNTDOWN; remaining > 0; remaining -= 1) {
+        setCountdown(remaining);
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      setCountdown(null);
 
       let selfieUri: string | null = null;
       try {
@@ -115,6 +129,7 @@ export default function CameraScreen() {
       setFacing('back');
       setStage('idle');
       setPreview(null);
+      setCountdown(null);
     }
   }, [router, stage]);
 
@@ -221,6 +236,26 @@ export default function CameraScreen() {
             </Pressable>
           </View>
 
+          {/* Counting down before the selfie. Keyed on the number so each tick
+              animates in on its own rather than the text simply changing. */}
+          {countdown !== null ? (
+            <Animated.View
+              key={countdown}
+              entering={ZoomIn.duration(220).easing(Easing.out(Easing.cubic))}
+              exiting={FadeOut.duration(180)}
+              pointerEvents="none"
+              className="absolute inset-0 items-center justify-center">
+              <View className="h-32 w-32 items-center justify-center rounded-full bg-overlay">
+                <Text className="text-7xl text-ink">{countdown}</Text>
+              </View>
+              <Animated.Text
+                entering={FadeIn.duration(200)}
+                className="mt-4 text-base text-ink">
+                Se på kameraet
+              </Animated.Text>
+            </Animated.View>
+          ) : null}
+
           {/* The first frame, shown while the front lens settles. */}
           {preview ? (
             <View className="absolute right-5 top-20 h-32 w-24 overflow-hidden rounded-tile">
@@ -262,7 +297,7 @@ export default function CameraScreen() {
               {stage === 'back'
                 ? 'Tar bildet…'
                 : stage === 'selfie'
-                  ? 'Snu deg — selfie!'
+                  ? 'Selfie om litt…'
                   : ready
                     ? 'Ett trykk tar begge bildene'
                     : 'Starter kameraet…'}
