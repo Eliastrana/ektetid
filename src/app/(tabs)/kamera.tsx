@@ -48,49 +48,37 @@ const MAX_VIDEO_SECONDS = 10;
 const HOLD_TO_RECORD_MS = 300;
 
 /**
- * Sort the lenses the device reports into the ones we offer.
+ * The zoom options to offer, given what the device reports.
  *
- * `selectedLens` is matched against `AVCaptureDevice.localizedName` — not the
- * device type — so the values coming back are display strings like "Back Ultra
- * Wide Camera", and they are translated on a non-English phone. Passing the
- * AVFoundation identifier `builtInUltraWideCamera`, as this used to, matched
- * nothing: the filter emptied the list, the control never rendered, and 0,5
- * was unreachable.
+ * Only the ultra-wide is ever named. 1x is represented by *no* lens at all —
+ * an unset `selectedLens` leaves iOS on its own default back camera, which is
+ * the wide one. That asymmetry is the whole point.
  *
- * Matching on "ultra" survives translation, since the term is a loanword in
- * the languages this ships in. Telephoto is deliberately left out: its
- * magnification varies by model — 2x on some iPhones, 5x on others — so there
- * is no honest fixed label, and mislabelling a zoom level is worse than not
- * offering it.
+ * Naming the 1x lens is what broke this twice. `selectedLens` matches against
+ * `AVCaptureDevice.localizedName`, so the values are display strings that vary
+ * by model and are translated on a non-English phone; the AVFoundation
+ * identifier matched nothing and the control never appeared. Guessing the name
+ * instead landed on a virtual multi-camera device — "Back Dual Wide Camera" —
+ * where zoom factor 1.0 is the ultra-wide's field of view, so every shot came
+ * out at 0,5. There is no name to get wrong if we do not supply one.
+ *
+ * "ultra" is the one match worth trusting: it is the distinctive part of the
+ * name, and a loanword in the languages this ships in. Telephoto is left out
+ * deliberately — its magnification varies by model, so there is no honest
+ * fixed label, and mislabelling a zoom level is worse than not offering it.
  */
-function backLensOptions(lenses: string[]): { id: string; label: string }[] {
+type LensOption = { id: string | null; label: string };
+
+function backLensOptions(lenses: string[]): LensOption[] {
   const ultraWide = lenses.find((lens) => lens.toLowerCase().includes('ultra'));
 
-  /*
-   * The plain wide-angle camera, and nothing that merely contains one.
-   *
-   * The device also reports virtual cameras that combine several physical
-   * ones — "Back Dual Wide Camera", "Back Triple Camera". Those pass a naive
-   * "not ultra, not tele" test, and picking one is why every shot came out at
-   * 0,5: on a virtual device that includes an ultra-wide, zoom factor 1.0 is
-   * the ultra-wide's field of view, not the wide one's. The 1× equivalent is
-   * factor 2.0. Excluding them leaves the real wide-angle camera, whose own
-   * default framing is what "1" is supposed to mean.
-   */
-  const combined = ['dual', 'triple', 'lidar', 'truedepth'];
-  const wide = lenses.find((lens) => {
-    const name = lens.toLowerCase();
-    if (name.includes('ultra') || name.includes('tele')) return false;
-    return !combined.some((part) => name.includes(part));
-  });
+  // No ultra-wide means no choice to offer, and the control stays hidden.
+  if (!ultraWide) return [];
 
-  const options: { id: string; label: string }[] = [];
-  if (ultraWide) options.push({ id: ultraWide, label: '0,5' });
-  // Omitted rather than guessed at if no single-lens camera is reported.
-  // Leaving selectedLens unset falls back to the system's own choice, which is
-  // a sensible 1×; naming a virtual device instead would not be.
-  if (wide) options.push({ id: wide, label: '1' });
-  return options;
+  return [
+    { id: ultraWide, label: '0,5' },
+    { id: null, label: '1' },
+  ];
 }
 
 export default function CameraScreen() {
@@ -403,11 +391,9 @@ export default function CameraScreen() {
           setAvailableLenses(lenses);
           // Settle on the plain wide lens once the names are known, so the
           // control starts on 1 rather than on whatever the system defaulted to.
-          setBackLens((current) => {
-            if (current && lenses.includes(current)) return current;
-            const options = backLensOptions(lenses);
-            return options.find((lens) => lens.label === '1')?.id ?? null;
-          });
+          // Drop a selection the new camera does not have; null is 1x, which
+          // every device has.
+          setBackLens((current) => (current && lenses.includes(current) ? current : null));
         }}
         onCameraReady={() => {
           console.log('[kamera] camera ready, facing:', facing);
@@ -514,7 +500,7 @@ export default function CameraScreen() {
                   const selected = lens.id === backLens;
                   return (
                     <Pressable
-                      key={lens.id}
+                      key={lens.label}
                       accessibilityRole="button"
                       accessibilityState={{ selected }}
                       accessibilityLabel={`${lens.label} ganger zoom`}
