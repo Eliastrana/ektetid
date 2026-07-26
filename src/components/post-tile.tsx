@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
+  type SharedValue,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -71,31 +72,7 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
   const hasDetail = !!post.description || !!post.selfieUrl;
   const progress = useSharedValue(expanded ? 1 : 0);
 
-  /*
-   * Natural heights, measured once from the laid-out text.
-   *
-   * A height cannot be animated from nothing to "however tall this turns out
-   * to be", so each block reports its own height and then animates against it.
-   * The blocks stay mounted and clipped at zero, which is what makes the
-   * measurement available before it is needed.
-   */
-  const [detailHeight, setDetailHeight] = useState(0);
-  const [hintHeight, setHintHeight] = useState(0);
 
-  /*
-   * Keep the last real measurement, and never accept zero.
-   *
-   * A block reports its height while its parent is already clipped to zero, so
-   * a zero reading is ambiguous — it may mean the text is genuinely empty, or
-   * that the clip was applied first. Taking it at face value would let the
-   * height collapse permanently and the description would stop opening at all;
-   * worse, it can oscillate, since writing the height back changes the layout
-   * that produced it.
-   */
-  const measure = (set: (value: number) => void) => (event: LayoutChangeEvent) => {
-    const { height } = event.nativeEvent.layout;
-    if (height > 0) set(height);
-  };
 
   useEffect(() => {
     progress.value = withTiming(expanded ? 1 : 0, { duration: DURATION, easing: EASING });
@@ -111,23 +88,8 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
     transform: [{ scale: SELFIE_MIN_SCALE + (1 - SELFIE_MIN_SCALE) * progress.value }],
   }));
 
-  const detailStyle = useAnimatedStyle(() => ({
-    height: detailHeight * progress.value,
-    opacity: progress.value,
-  }));
 
-  const hintStyle = useAnimatedStyle(() => ({
-    height: hintHeight * (1 - progress.value),
-    opacity: 1 - progress.value,
-  }));
 
-  /*
-   * Until a height is known the block is left unconstrained and invisible, so
-   * it lays out at its natural size and can be measured. Constraining it from
-   * the first frame would be circular — the height is needed to compute the
-   * height.
-   */
-  const UNMEASURED = { opacity: 0 } as const;
 
   return (
     <Pressable
@@ -172,21 +134,19 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
           </View>
 
           {post.description ? (
-            <Animated.View
-              style={[detailHeight > 0 ? detailStyle : UNMEASURED, { overflow: 'hidden' }]}>
-              <View className="pt-3" onLayout={measure(setDetailHeight)}>
+            <Collapsible progress={progress}>
+              <View className="pt-3">
                 <Text className="text-base text-ink opacity-95">{post.description}</Text>
               </View>
-            </Animated.View>
+            </Collapsible>
           ) : null}
 
           {hasDetail ? (
-            <Animated.View
-              style={[hintHeight > 0 ? hintStyle : UNMEASURED, { overflow: 'hidden' }]}>
-              <View className="pt-1" onLayout={measure(setHintHeight)}>
+            <Collapsible progress={progress} invert>
+              <View className="pt-1">
                 <Text className="text-xs text-ink opacity-50">Trykk for mer</Text>
               </View>
-            </Animated.View>
+            </Collapsible>
           ) : null}
         </View>
 
@@ -228,5 +188,55 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+/**
+ * A block that opens and closes with the tile, from zero to its own height.
+ *
+ * The content is rendered twice: once invisibly and unconstrained purely to be
+ * measured, and once inside the animated clip. That looks wasteful, and the
+ * obvious version — measure the visible copy — is what broke the description.
+ * A child reports a smaller height once its parent is clipped, that value gets
+ * written back as the new target, and the two ratchet each other down: the
+ * measurements came in at 31, then 17, then 10 points, until the text had no
+ * room left to appear in. Guarding against zero does not help, because none of
+ * those readings is zero. The measuring copy is never given a height, so it
+ * always reports the real one.
+ */
+function Collapsible({
+  progress,
+  invert = false,
+  children,
+}: {
+  progress: SharedValue<number>;
+  /** Open as the tile closes, for the "Trykk for mer" hint. */
+  invert?: boolean;
+  children: React.ReactNode;
+}) {
+  const [height, setHeight] = useState(0);
+
+  const style = useAnimatedStyle(() => {
+    const t = invert ? 1 - progress.value : progress.value;
+    return { height: height * t, opacity: t };
+  });
+
+  return (
+    <View>
+      <View
+        // Out of flow, so it contributes nothing to the layout it is measuring.
+        style={{ position: 'absolute', left: 0, right: 0, opacity: 0 }}
+        pointerEvents="none"
+        onLayout={(event) => {
+          const next = event.nativeEvent.layout.height;
+          // Half a point of tolerance: text metrics land on fractions, and
+          // rewriting state for 31.6667 vs 31.6666 would loop forever.
+          if (next > 0 && Math.abs(next - height) > 0.5) setHeight(next);
+        }}>
+        {children}
+      </View>
+
+      <Animated.View style={[style, { overflow: 'hidden' }]}>{children}</Animated.View>
+    </View>
   );
 }

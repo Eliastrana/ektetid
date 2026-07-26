@@ -132,13 +132,10 @@ function Row({
         <Text className="text-base text-ink">{title}</Text>
         <Text className="mt-0.5 text-xs text-muted">{detail}</Text>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ true: '#ffffff', false: '#3a3d42' }}
-        thumbColor="#000000"
-        ios_backgroundColor="#3a3d42"
-      />
+      {/* Left as the system switch. The white-on-black override read as
+          disabled when it was on, which is the opposite of what a switch is
+          for — and iOS users know the green one at a glance. */}
+      <Switch value={value} onValueChange={onChange} />
     </View>
   );
 }

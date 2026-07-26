@@ -105,6 +105,17 @@ export default function AlbumScreen() {
   const genie = useSharedValue(origin ? 0 : 1);
   // Declared here rather than with the other state below: genieStyle reads
   // translateY, so it has to exist before that hook runs.
+  /** Drives the burst that confirms a double-tap heart. */
+  const burst = useSharedValue(0);
+  /**
+   * Show the whole frame instead of filling the screen.
+   *
+   * Photos are stored at their original aspect and displayed edge to edge, so
+   * a portrait screen crops the sides off a landscape shot. Pinching out
+   * reveals what the crop hid.
+   */
+  const [uncropped, setUncropped] = useState(false);
+
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const chrome = useSharedValue(1);
@@ -372,6 +383,35 @@ export default function AlbumScreen() {
   }, [genie, origin, router, translateY]);
 
   /** Cancelled drag: re-open, matching the curve the button uses. */
+  const likeByDoubleTap = useCallback(() => {
+    revealChrome();
+    burst.value = 0;
+    burst.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.cubic) });
+
+    if (likes.likedByMe) {
+      // Already liked: confirm the gesture was seen, but change nothing.
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      return;
+    }
+    void onToggleLike();
+  }, [burst, likes.likedByMe, onToggleLike, revealChrome]);
+
+  const setUncroppedWithFeedback = useCallback((next: boolean) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+    setUncropped(next);
+  }, []);
+
+  const burstStyle = useAnimatedStyle(() => {
+    const t = burst.value;
+    if (t === 0 || t === 1) return { opacity: 0, transform: [{ scale: 0 }] };
+    return {
+      // Grows quickly, holds, then fades — the shape of a stamp rather than a
+      // fade in and out, which would read as something loading.
+      opacity: t < 0.15 ? t / 0.15 : t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1,
+      transform: [{ scale: 0.6 + Math.min(t / 0.3, 1) * 0.55 }],
+    };
+  });
+
   const springBackY = useCallback(() => {
     const back = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
     translateY.value = withTiming(0, back);
@@ -418,14 +458,58 @@ export default function AlbumScreen() {
 
   const tap = useMemo(
     () =>
-      Gesture.Tap().onEnd((event) => {
-        runOnJS(revealChrome)();
-        runOnJS(go)(event.x < width / 2 ? -1 : 1);
-      }),
+      Gesture.Tap()
+        // Waits for a possible second tap before advancing. Without this the
+        // first tap of a double-tap would already have changed the photo, and
+        // the heart would land on the wrong one.
+        .numberOfTaps(1)
+        .onEnd((event) => {
+          runOnJS(revealChrome)();
+          runOnJS(go)(event.x < width / 2 ? -1 : 1);
+        }),
     [go, revealChrome, width]
   );
 
-  const gesture = useMemo(() => Gesture.Exclusive(pan, tap), [pan, tap]);
+  /**
+   * Double-tap to like, the way every photo app has taught people to.
+   *
+   * Only ever adds a like — never removes one. Undoing by accident is much
+   * worse than failing to undo, and the heart button is right there for that.
+   */
+  const doubleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .numberOfTaps(2)
+        .maxDuration(300)
+        .onEnd(() => {
+          runOnJS(likeByDoubleTap)();
+        }),
+    [likeByDoubleTap]
+  );
+
+  /**
+   * Pinch to see the uncropped frame.
+   *
+   * A threshold rather than a live zoom: the photo is a background layer under
+   * the chrome, not a canvas to pan around, and a free zoom would need
+   * boundaries, momentum and a way back. Pinch in to reveal, out to fill again.
+   */
+  const pinch = useMemo(
+    () =>
+      Gesture.Pinch().onEnd((event) => {
+        if (event.scale < 0.8) runOnJS(setUncroppedWithFeedback)(true);
+        else if (event.scale > 1.25) runOnJS(setUncroppedWithFeedback)(false);
+      }),
+    [setUncroppedWithFeedback]
+  );
+
+  // Double-tap has to be offered before the single tap, or the single always
+  // claims the first touch. Pinch runs alongside, since it cannot be confused
+  // with either.
+  const gesture = useMemo(
+    () => Gesture.Simultaneous(pinch, Gesture.Exclusive(doubleTap, pan, tap)),
+    [doubleTap, pan, pinch, tap]
+  );
 
   const photoStyle = useAnimatedStyle(() => ({
     // Horizontal only. A downward drag now moves the whole album via genieStyle,
@@ -520,7 +604,9 @@ export default function AlbumScreen() {
               placeholder={current.blurhash ? { blurhash: current.blurhash } : undefined}
               recyclingKey={current.id}
               transition={180}
-              contentFit="cover"
+              // contain shows the whole frame, letterboxed against the canvas;
+              // cover fills the screen and crops whatever does not fit.
+              contentFit={uncropped ? 'contain' : 'cover'}
               style={{ flex: 1 }}
             />
           ) : (
@@ -579,6 +665,24 @@ export default function AlbumScreen() {
         </Animated.View>
 
         <View className="flex-1" pointerEvents="none" />
+
+        {/*
+          The heart a double-tap leaves behind.
+
+          Sits above the photo but below the chrome, and takes no touches, so
+          it cannot swallow the next tap while it is fading.
+        */}
+        <Animated.View
+          style={burstStyle}
+          pointerEvents="none"
+          className="absolute inset-0 items-center justify-center">
+          <SymbolView
+            name="heart.fill"
+            size={120}
+            tintColor="#ffffff"
+            fallback={<Text className="text-8xl">❤️</Text>}
+          />
+        </Animated.View>
 
         {bounce ? (
           <View className="absolute left-6 top-1/2" pointerEvents="none">
