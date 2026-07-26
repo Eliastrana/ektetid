@@ -21,23 +21,27 @@ public class VolumeButtonsModule: Module {
     Events("onVolumeChange")
 
     OnStartObserving {
-      let session = AVAudioSession.sharedInstance()
-
-      // ambient, so this never interrupts music the user already has playing —
-      // reading the volume must not be the reason someone's podcast stops.
-      try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
-      try? session.setActive(true)
-
-      self.observation = session.observe(\.outputVolume, options: [.new]) { [weak self] _, change in
-        guard let volume = change.newValue else { return }
-        self?.sendEvent("onVolumeChange", ["volume": Double(volume)])
-      }
+      /*
+       * Observe only. Nothing here configures or activates the session.
+       *
+       * It used to set an ambient category and activate the session, which
+       * froze video playback: expo-video owns the session while a clip is
+       * playing, and reconfiguring it underneath stalls the player. Worse, the
+       * matching deactivation on teardown tore the session out from under
+       * whatever was still using it. outputVolume is readable and observable
+       * without any of that — the property reflects the hardware, not our
+       * session.
+       */
+      self.observation = AVAudioSession.sharedInstance()
+        .observe(\.outputVolume, options: [.new]) { [weak self] _, change in
+          guard let volume = change.newValue else { return }
+          self?.sendEvent("onVolumeChange", ["volume": Double(volume)])
+        }
     }
 
     OnStopObserving {
       self.observation?.invalidate()
       self.observation = nil
-      try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
   }
 }

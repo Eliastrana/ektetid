@@ -10,11 +10,13 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, ZoomIn, runOnJS } from 'react-native-reanimated';
 
 import Svg, { Circle } from 'react-native-svg';
+
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { Screen } from '@/components/screen';
 import * as VideoThumbnails from 'expo-video-thumbnails';
@@ -107,7 +109,8 @@ export default function CameraScreen() {
   const [mode, setMode] = useState<'picture' | 'video'>('picture');
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Covers the preview while the capture session changes shape. */
+  const [switching, setSwitching] = useState(false);
   const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Set when the press turned into a recording, so release knows what to do. */
   const recordingRef = useRef(false);
@@ -219,24 +222,45 @@ export default function CameraScreen() {
   }, [captureSelfie, router]);
 
   /** Held long enough to mean video: switch the session over and start. */
-  const onShutterIn = useCallback(() => {
+  const beginHold = useCallback(() => {
     if (stage !== 'idle' || recordingRef.current) return;
-    holdTimer.current = setTimeout(() => {
-      setMode('video');
-      setStage('back');
-      // The session needs a moment to reconfigure before it will record.
-      setTimeout(() => void runRecording(), 220);
-    }, HOLD_TO_RECORD_MS);
+    // Cover the preview before the session changes shape, not after.
+    setSwitching(true);
+    setMode('video');
+    setStage('back');
+    // The session needs a moment to reconfigure before it will record.
+    setTimeout(() => {
+      setSwitching(false);
+      void runRecording();
+    }, 260);
   }, [runRecording, stage]);
 
-  /** Released: stop a recording, or let the tap fall through to a photo. */
-  const onShutterOut = useCallback(() => {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
+  /** Released: stop the recording, wherever the finger happens to be. */
+  const endHold = useCallback(() => {
     if (recordingRef.current) cameraRef.current?.stopRecording();
   }, []);
+
+  /*
+   * The shutter's gestures.
+   *
+   * A Pressable was wrong for the hold: onPressOut fires when the touch is
+   * cancelled as well as when it ends, so sliding a thumb off the button
+   * stopped the recording mid-clip. A long press with an effectively unlimited
+   * maxDistance keeps following the finger until it actually lifts, which is
+   * what "hold to record" means everywhere else.
+   */
+  const shutterGesture = useMemo(
+    () =>
+      Gesture.Exclusive(
+        Gesture.LongPress()
+          .minDuration(HOLD_TO_RECORD_MS)
+          .maxDistance(10000)
+          .onStart(() => runOnJS(beginHold)())
+          .onEnd(() => runOnJS(endHold)()),
+        Gesture.Tap().onEnd(() => runOnJS(capturePairRef.current)())
+      ),
+    [beginHold, endHold]
+  );
 
   /*
    * Ask for the microphone as soon as the camera screen opens.
@@ -252,6 +276,9 @@ export default function CameraScreen() {
       void requestMicPermission();
     }
   }, [micPermission, permission?.granted, requestMicPermission]);
+
+  /** Lets the gesture reach capturePair, which is defined below it. */
+  const capturePairRef = useRef<() => void>(() => {});
 
   const capturePair = useCallback(async () => {
     // The press became a recording, so the tap that follows release is not a
@@ -302,6 +329,8 @@ export default function CameraScreen() {
       setCountdown(null);
     }
   }, [captureSelfie, mode, router, stage]);
+
+  capturePairRef.current = () => void capturePair();
 
   const pickFromLibrary = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -389,6 +418,25 @@ export default function CameraScreen() {
           setError('Kameraet kunne ikke startes.');
         }}
       />
+
+      {/*
+        A blackout over the preview while the capture session is reconfigured.
+
+        Switching from picture to video changes the session preset, and with it
+        the preview's aspect — so the frame visibly jumped and resized just
+        before recording began. The session cannot be told to hold still, but
+        the moment can be covered: this fades in before the switch and out once
+        it has settled, so a hold reads as the camera arming rather than
+        glitching.
+      */}
+      {switching ? (
+        <Animated.View
+          entering={FadeIn.duration(90)}
+          exiting={FadeOut.duration(160)}
+          pointerEvents="none"
+          className="absolute inset-0 bg-canvas"
+        />
+      ) : null}
 
       {/*
         CameraView takes no children in SDK 57 — nesting the controls inside it
@@ -525,17 +573,11 @@ export default function CameraScreen() {
                 />
               </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Ta bilde"
-                disabled={busy}
-                onPress={capturePair}
-                onPressIn={onShutterIn}
-                onPressOut={onShutterOut}
-                // Handled through press-in and press-out rather than
-                // onLongPress, because the recording has to stop on release
-                // and onLongPress gives no release event.
-                className="h-20 w-20 items-center justify-center rounded-full active:opacity-70">
+              <GestureDetector gesture={shutterGesture}>
+                <View
+                  accessibilityRole="button"
+                  accessibilityLabel="Ta bilde, eller hold for video"
+                  className="h-20 w-20 items-center justify-center rounded-full">
                 {/* The ring sits outside the button's own edge, so the border
                     stays put and only the progress arc moves. */}
                 <View className="absolute inset-0 items-center justify-center">
@@ -547,15 +589,16 @@ export default function CameraScreen() {
                   />
                 </View>
 
-                {busy && !recording ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : recording ? (
-                  // A square, the way every camera signals "recording".
-                  <View className="h-9 w-9 rounded-lg bg-alert" />
-                ) : (
-                  <View className="h-16 w-16 rounded-full bg-ink" />
-                )}
-              </Pressable>
+                  {busy && !recording ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : recording ? (
+                    // A square, the way every camera signals "recording".
+                    <View className="h-9 w-9 rounded-lg bg-alert" />
+                  ) : (
+                    <View className="h-16 w-16 rounded-full bg-ink" />
+                  )}
+                </View>
+              </GestureDetector>
 
               <Pressable
                 accessibilityRole="button"

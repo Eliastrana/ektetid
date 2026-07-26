@@ -116,6 +116,8 @@ export default function AlbumScreen() {
    * reveals what the crop hid.
    */
   const [uncropped, setUncropped] = useState(false);
+  /** Video sound, off until asked for. Reset whenever the post changes. */
+  const [muted, setMuted] = useState(true);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -328,6 +330,9 @@ export default function AlbumScreen() {
 
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setExpanded(false);
+      // Each post starts on its own terms: silent, and framed as shot.
+      setMuted(true);
+      setUncropped(false);
       setIndex(next);
       revealChrome();
     },
@@ -488,28 +493,13 @@ export default function AlbumScreen() {
     [likeByDoubleTap]
   );
 
-  /**
-   * Pinch to see the uncropped frame.
-   *
-   * A threshold rather than a live zoom: the photo is a background layer under
-   * the chrome, not a canvas to pan around, and a free zoom would need
-   * boundaries, momentum and a way back. Pinch in to reveal, out to fill again.
-   */
-  const pinch = useMemo(
-    () =>
-      Gesture.Pinch().onEnd((event) => {
-        if (event.scale < 0.8) runOnJS(setUncroppedWithFeedback)(true);
-        else if (event.scale > 1.25) runOnJS(setUncroppedWithFeedback)(false);
-      }),
-    [setUncroppedWithFeedback]
-  );
 
   // Double-tap has to be offered before the single tap, or the single always
   // claims the first touch. Pinch runs alongside, since it cannot be confused
   // with either.
   const gesture = useMemo(
-    () => Gesture.Simultaneous(pinch, Gesture.Exclusive(doubleTap, pan, tap)),
-    [doubleTap, pan, pinch, tap]
+    () => Gesture.Exclusive(doubleTap, pan, tap),
+    [doubleTap, pan, tap]
   );
 
   const photoStyle = useAnimatedStyle(() => ({
@@ -602,7 +592,14 @@ export default function AlbumScreen() {
           {current?.videoUrl ? (
             /* Keyed on the post so moving to the next clip builds a new player
                rather than reusing one still pointed at the previous file. */
-            <PostVideo key={current.id} uri={current.videoUrl} active />
+            <PostVideo
+              key={current.id}
+              uri={current.videoUrl}
+              active
+              muted={muted}
+              onUnmute={() => setMuted(false)}
+              uncropped={uncropped}
+            />
           ) : current?.imageUrl ? (
             <Image
               source={{ uri: current.imageUrl }}
@@ -650,6 +647,51 @@ export default function AlbumScreen() {
                 </Text>
               ) : null}
             </View>
+
+            {/*
+              Sound and framing, in the chrome rather than over the photo.
+
+              Both were gestures or overlays sitting inside the carousel's
+              gesture detector, so using them also counted as a tap on the
+              photo and advanced to the next post. Up here they are ordinary
+              buttons in a row that takes no part in the swipe.
+            */}
+            {current?.videoUrl ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={muted ? 'Slå på lyd' : 'Slå av lyd'}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  setMuted((value) => !value);
+                }}
+                hitSlop={8}
+                className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
+                <SymbolView
+                  name={muted ? 'speaker.slash.fill' : 'speaker.wave.2.fill'}
+                  size={16}
+                  tintColor="#ffffff"
+                  fallback={<Text className="text-lg text-ink">{muted ? '🔇' : '🔊'}</Text>}
+                />
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={uncropped ? 'Fyll skjermen' : 'Vis hele bildet'}
+              onPress={() => setUncroppedWithFeedback(!uncropped)}
+              hitSlop={8}
+              className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
+              <SymbolView
+                name={
+                  uncropped
+                    ? 'arrow.down.forward.and.arrow.up.backward'
+                    : 'arrow.up.backward.and.arrow.down.forward'
+                }
+                size={16}
+                tintColor="#ffffff"
+                fallback={<Text className="text-lg text-ink">{uncropped ? '⤡' : '⤢'}</Text>}
+              />
+            </Pressable>
 
             {album.canEdit ? (
               <Pressable
