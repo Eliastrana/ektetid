@@ -229,28 +229,6 @@ export default function CameraScreen() {
   }, []);
 
   /*
-   * The shutter's gestures.
-   *
-   * A Pressable was wrong for the hold: onPressOut fires when the touch is
-   * cancelled as well as when it ends, so sliding a thumb off the button
-   * stopped the recording mid-clip. A long press with an effectively unlimited
-   * maxDistance keeps following the finger until it actually lifts, which is
-   * what "hold to record" means everywhere else.
-   */
-  const shutterGesture = useMemo(
-    () =>
-      Gesture.Exclusive(
-        Gesture.LongPress()
-          .minDuration(HOLD_TO_RECORD_MS)
-          .maxDistance(10000)
-          .onStart(() => runOnJS(beginHold)())
-          .onEnd(() => runOnJS(endHold)()),
-        Gesture.Tap().onEnd(() => runOnJS(capturePairRef.current)())
-      ),
-    [beginHold, endHold]
-  );
-
-  /*
    * Ask for the microphone as soon as the camera screen opens.
    *
    * Not when recording starts: the system dialog steals the first second or
@@ -264,9 +242,6 @@ export default function CameraScreen() {
       void requestMicPermission();
     }
   }, [micPermission, permission?.granted, requestMicPermission]);
-
-  /** Lets the gesture reach capturePair, which is defined below it. */
-  const capturePairRef = useRef<() => void>(() => {});
 
   const capturePair = useCallback(async () => {
     // The press became a recording, so the tap that follows release is not a
@@ -318,7 +293,35 @@ export default function CameraScreen() {
     }
   }, [captureSelfie, mode, router, stage]);
 
-  capturePairRef.current = () => void capturePair();
+  /*
+   * The shutter's gestures, declared after the handlers they call.
+   *
+   * Every function here has to be a real value the worklet can capture. It
+   * previously reached the tap handler through a ref, reading `.current` inside
+   * the worklet — a React ref lives on the JavaScript side, and dereferencing
+   * one on the UI thread crashed the app the moment anyone took a photo.
+   *
+   * A Pressable was wrong for the hold: onPressOut fires when the touch is
+   * cancelled as well as when it ends, so sliding a thumb off the button
+   * stopped the recording mid-clip. A long press with an effectively unlimited
+   * maxDistance keeps following the finger until it actually lifts.
+   */
+  const takePhoto = useCallback(() => {
+    void capturePair();
+  }, [capturePair]);
+
+  const shutterGesture = useMemo(
+    () =>
+      Gesture.Exclusive(
+        Gesture.LongPress()
+          .minDuration(HOLD_TO_RECORD_MS)
+          .maxDistance(10000)
+          .onStart(() => runOnJS(beginHold)())
+          .onEnd(() => runOnJS(endHold)()),
+        Gesture.Tap().onEnd(() => runOnJS(takePhoto)())
+      ),
+    [beginHold, endHold, takePhoto]
+  );
 
   const pickFromLibrary = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
