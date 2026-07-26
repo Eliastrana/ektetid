@@ -1,0 +1,8 @@
+{
+  "name": "volume-buttons",
+  "version": "1.0.0",
+  "description": "Reports system output volume changes, so a muted video can unmute when the user reaches for the volume buttons.",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "author": "Elias Trana"
+}

@@ -4,6 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
+import { addVolumeChangeListener } from '@/../modules/volume-buttons';
+
 type Props = {
   uri: string;
   /** Whether this post is the one on screen. Off-screen clips do not play. */
@@ -38,6 +40,21 @@ export function PostVideo({ uri, active }: Props) {
     if (active) player.play();
     else player.pause();
   }, [active, player]);
+
+  /*
+   * Reaching for the volume means you want to hear it.
+   *
+   * The buttons belong to the system and cannot be intercepted, but the volume
+   * they change can be watched — so a change while muted is read as the
+   * request it plainly is. Only ever unmutes: turning the volume down is not a
+   * reason to start playing sound, and someone who has deliberately muted the
+   * clip and then adjusts their ringer should not be overridden.
+   */
+  useEffect(() => {
+    if (!active || !muted) return;
+    const subscription = addVolumeChangeListener(() => setMuted(false));
+    return () => subscription.remove();
+  }, [active, muted]);
 
   return (
     <View className="flex-1">
