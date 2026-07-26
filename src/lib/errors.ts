@@ -19,6 +19,19 @@ export function errorMessage(caught: unknown, fallback: string): string {
           ? shaped.error_description
           : null;
 
+    /*
+     * 42501 is Postgres refusing a write under row-level security.
+     *
+     * Every policy in this app authorises against auth.uid(), so a refusal
+     * nearly always means the request arrived with a different session than
+     * the one the app thinks it has — an expired or replaced token — rather
+     * than the user genuinely lacking permission. Saying so gives them
+     * something to act on; quoting the database does not.
+     */
+    if (shaped.code === '42501') {
+      return 'Økten din har utløpt. Logg ut og inn igjen, så prøver du på nytt.';
+    }
+
     if (message) {
       // The code is what makes a Postgres error searchable; 23503 is a foreign
       // key violation, 42501 an RLS denial.

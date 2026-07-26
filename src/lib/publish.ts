@@ -172,11 +172,21 @@ export async function listWritableAlbums(userId: string): Promise<WritableAlbum[
   return albums.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
-export async function createAlbum(
-  userId: string,
-  title: string,
-  description?: string
-): Promise<string> {
+/**
+ * Create an album owned by whoever is signed in right now.
+ *
+ * The owner comes from the server rather than from a component's copy of the
+ * session, which is what publishPost already did and this did not. The
+ * albums_insert policy checks `owner_id = auth.uid()`, so the two have to agree
+ * — and a cached id that has drifted from the token the client is actually
+ * sending fails as a row-level security violation, which reads like a
+ * permissions bug rather than an expired session.
+ */
+export async function createAlbum(title: string, description?: string): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Du er ikke logget inn.');
+
   const { data, error } = await supabase
     .from('albums')
     .insert({ owner_id: userId, title: title.trim(), description: description?.trim() || null })

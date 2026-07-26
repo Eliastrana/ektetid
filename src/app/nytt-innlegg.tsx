@@ -108,7 +108,7 @@ export default function NewPostScreen() {
       let targetAlbum = albumId;
       if (!targetAlbum) {
         const name = newAlbumTitle.trim() || 'Nytt album';
-        targetAlbum = await createAlbum(userId, name);
+        targetAlbum = await createAlbum(name);
       }
 
       await publishPost(
