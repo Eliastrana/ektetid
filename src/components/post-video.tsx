@@ -1,6 +1,7 @@
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
  */
 export function PostVideo({ uri, active }: Props) {
   const [muted, setMuted] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const player = useVideoPlayer(uri, (instance) => {
     instance.loop = true;
@@ -51,12 +53,22 @@ export function PostVideo({ uri, active }: Props) {
         allowsPictureInPicture={false}
       />
 
+      {/*
+        Below the album's own controls, not over them.
+        
+        The video fills the screen behind the chrome, so a fixed inset from the
+        top put this on the same line as the close and edit buttons — overlapping
+        the edit one. Measured from the safe area instead: the progress bar and
+        the button row above come to roughly 67 points, so this clears them
+        whatever the notch is doing.
+      */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={muted ? 'Slå på lyd' : 'Slå av lyd'}
         onPress={() => setMuted((value) => !value)}
         hitSlop={10}
-        className="absolute right-4 top-4 h-10 w-10 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
+        style={{ top: insets.top + 76 }}
+        className="absolute right-5 h-10 w-10 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
         <SymbolView
           name={muted ? 'speaker.slash.fill' : 'speaker.wave.2.fill'}
           size={16}

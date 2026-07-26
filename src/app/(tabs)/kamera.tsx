@@ -1,6 +1,7 @@
 import {
   CameraView,
   useCameraPermissions,
+  useMicrophonePermissions,
   type CameraCapturedPicture,
   type FlashMode,
 } from 'expo-camera';
@@ -9,9 +10,11 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+
+import Svg, { Circle } from 'react-native-svg';
 
 import { Screen } from '@/components/screen';
 import * as VideoThumbnails from 'expo-video-thumbnails';
@@ -92,6 +95,7 @@ export default function CameraScreen() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
@@ -233,6 +237,21 @@ export default function CameraScreen() {
     }
     if (recordingRef.current) cameraRef.current?.stopRecording();
   }, []);
+
+  /*
+   * Ask for the microphone as soon as the camera screen opens.
+   *
+   * Not when recording starts: the system dialog steals the first second or
+   * two of a clip that is capped at ten, so the first video anyone records
+   * would be the one ruined by the prompt. Asking here costs nothing — the
+   * user has already chosen to open the camera — and by the time they hold the
+   * shutter the answer is in.
+   */
+  useEffect(() => {
+    if (permission?.granted && micPermission && !micPermission.granted && micPermission.canAskAgain) {
+      void requestMicPermission();
+    }
+  }, [micPermission, permission?.granted, requestMicPermission]);
 
   const capturePair = useCallback(async () => {
     // The press became a recording, so the tap that follows release is not a
@@ -475,7 +494,7 @@ export default function CameraScreen() {
               className={`rounded-full px-3 py-1.5 ${recording ? 'bg-alert' : 'bg-overlay'}`}>
               <Text className={`text-sm ${busy ? 'text-ink' : 'text-ink opacity-80'}`}>
                 {recording
-                  ? `${Math.max(MAX_VIDEO_SECONDS - elapsed, 0).toFixed(1)} s igjen`
+                  ? 'Slipp for å avslutte'
                   : stage === 'back'
                     ? 'Tar bildet…'
                     : stage === 'selfie'
@@ -516,21 +535,23 @@ export default function CameraScreen() {
                 // Handled through press-in and press-out rather than
                 // onLongPress, because the recording has to stop on release
                 // and onLongPress gives no release event.
-                className={`h-20 w-20 items-center justify-center rounded-full border-4 active:opacity-70 ${
-                  recording ? 'border-alert' : 'border-ink'
-                }`}>
+                className="h-20 w-20 items-center justify-center rounded-full active:opacity-70">
+                {/* The ring sits outside the button's own edge, so the border
+                    stays put and only the progress arc moves. */}
+                <View className="absolute inset-0 items-center justify-center">
+                  <ShutterRing
+                    size={80}
+                    stroke={4}
+                    progress={recording ? Math.min(elapsed / MAX_VIDEO_SECONDS, 1) : 0}
+                    recording={recording}
+                  />
+                </View>
+
                 {busy && !recording ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : recording ? (
-                  // A square, the way every camera signals "recording" — and
-                  // it shrinks as the ten seconds run down.
-                  <View
-                    className="rounded-lg bg-alert"
-                    style={{
-                      width: 40 - (elapsed / MAX_VIDEO_SECONDS) * 12,
-                      height: 40 - (elapsed / MAX_VIDEO_SECONDS) * 12,
-                    }}
-                  />
+                  // A square, the way every camera signals "recording".
+                  <View className="h-9 w-9 rounded-lg bg-alert" />
                 ) : (
                   <View className="h-16 w-16 rounded-full bg-ink" />
                 )}
@@ -558,5 +579,60 @@ export default function CameraScreen() {
         </Screen>
       </View>
     </View>
+  );
+}
+
+/**
+ * The shutter's outline, doubling as the recording countdown.
+ *
+ * A ring rather than a number: the ten seconds are a limit to feel, not a
+ * figure to read, and nobody watching their own framing wants to also parse
+ * "6,3 s igjen". Drawn as a stroked circle with a dash gap the length of the
+ * remaining arc, which is how every progress ring is built — the alternative,
+ * clipped rotating half-circles, needs no dependency but is far harder to get
+ * right at the seam.
+ */
+function ShutterRing({
+  size,
+  stroke,
+  progress,
+  recording,
+}: {
+  size: number;
+  stroke: number;
+  progress: number;
+  recording: boolean;
+}) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <Svg width={size} height={size}>
+      <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        stroke="#ffffff"
+        strokeWidth={stroke}
+        fill="none"
+        // Dimmed while recording so the red arc reads against it.
+        opacity={recording ? 0.3 : 1}
+      />
+      {recording ? (
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#ff3b30"
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - progress)}
+          // Starts at twelve o'clock instead of three, where a stroke begins.
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      ) : null}
+    </Svg>
   );
 }
