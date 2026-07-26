@@ -14,6 +14,8 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 import { Screen } from '@/components/screen';
+import * as VideoThumbnails from 'expo-video-thumbnails';
+
 import { setPendingCapture } from '@/lib/pending-capture';
 
 /**
@@ -26,6 +28,19 @@ import { setPendingCapture } from '@/lib/pending-capture';
  * covers the exposure settling the delay was originally there for.
  */
 const SELFIE_COUNTDOWN = 3;
+
+/** Longest clip a held shutter records, in seconds. */
+const MAX_VIDEO_SECONDS = 10;
+
+/**
+ * How long the shutter must be held before it starts recording.
+ *
+ * Below this a press is a photo. It also covers the camera session switching
+ * from picture to video mode, which cannot be done in advance: the two use
+ * different session configurations, and staying in video mode would drop every
+ * still to video resolution.
+ */
+const HOLD_TO_RECORD_MS = 300;
 
 /**
  * Sort the lenses the device reports into the ones we offer.
@@ -85,6 +100,13 @@ export default function CameraScreen() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [mode, setMode] = useState<'picture' | 'video'>('picture');
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Set when the press turned into a recording, so release knows what to do. */
+  const recordingRef = useRef(false);
 
   // Lens selection is iOS-only; on Android onAvailableLensesChanged never
   // fires, so the control simply never appears.
@@ -97,7 +119,125 @@ export default function CameraScreen() {
   // front one is active — including mid-capture, when we flip for the selfie.
   const zoomOptions = facing === 'back' ? backLensOptions(availableLenses) : [];
 
+  /**
+   * Flip to the front camera, count down, and take the selfie.
+   *
+   * Shared by the photo and the video path so a clip ends exactly the way a
+   * still does — the pairing is the point of the app, and a video without the
+   * selfie would be a different kind of post.
+   */
+  const captureSelfie = useCallback(async (): Promise<string | null> => {
+    setStage('selfie');
+    setFacing('front');
+
+    for (let remaining = SELFIE_COUNTDOWN; remaining > 0; remaining -= 1) {
+      setCountdown(remaining);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    setCountdown(null);
+
+    try {
+      const selfie = await cameraRef.current?.takePictureAsync({
+        quality: 0.8,
+        shutterSound: false,
+      });
+      return selfie?.uri ?? null;
+    } catch {
+      // A missing selfie is not fatal — the post still works without one.
+      return null;
+    }
+  }, []);
+
+  /**
+   * Record until the shutter is released, or ten seconds, whichever is first.
+   *
+   * The promise from recordAsync does not settle until recording stops, so the
+   * release handler calls stopRecording and this resolves with the file. The
+   * maxDuration cap is enforced natively as well, which is what stops a finger
+   * left on the button from filling the disk.
+   */
+  const runRecording = useCallback(async () => {
+    try {
+      setError(null);
+      setRecording(true);
+      recordingRef.current = true;
+      setElapsed(0);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+      tickTimer.current = setInterval(() => setElapsed((value) => value + 0.1), 100);
+
+      const clip = await cameraRef.current?.recordAsync({
+        maxDuration: MAX_VIDEO_SECONDS,
+      });
+
+      if (tickTimer.current) clearInterval(tickTimer.current);
+      setRecording(false);
+      recordingRef.current = false;
+
+      if (!clip?.uri) throw new Error('Fikk ikke tatt opp videoen.');
+
+      /*
+       * A still from the clip, so the rest of the app never has to care that
+       * this post is a video: the grid cover, the map pin, the blurhash and
+       * the notification all read image_path as usual.
+       */
+      const poster = await VideoThumbnails.getThumbnailAsync(clip.uri, { time: 0 });
+
+      const selfieUri = await captureSelfie();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      setPendingCapture({
+        imageUri: poster.uri,
+        videoUri: clip.uri,
+        selfieUri,
+        exif: null,
+        width: poster.width,
+        height: poster.height,
+      });
+
+      router.push('/nytt-innlegg');
+    } catch (caught) {
+      console.error('[kamera] recording failed', caught);
+      setError(caught instanceof Error ? caught.message : 'Klarte ikke å ta opp video.');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      if (tickTimer.current) clearInterval(tickTimer.current);
+      setRecording(false);
+      recordingRef.current = false;
+      setElapsed(0);
+      setMode('picture');
+      setFacing('back');
+      setStage('idle');
+      setPreview(null);
+      setCountdown(null);
+    }
+  }, [captureSelfie, router]);
+
+  /** Held long enough to mean video: switch the session over and start. */
+  const onShutterIn = useCallback(() => {
+    if (stage !== 'idle' || recordingRef.current) return;
+    holdTimer.current = setTimeout(() => {
+      setMode('video');
+      setStage('back');
+      // The session needs a moment to reconfigure before it will record.
+      setTimeout(() => void runRecording(), 220);
+    }, HOLD_TO_RECORD_MS);
+  }, [runRecording, stage]);
+
+  /** Released: stop a recording, or let the tap fall through to a photo. */
+  const onShutterOut = useCallback(() => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (recordingRef.current) cameraRef.current?.stopRecording();
+  }, []);
+
   const capturePair = useCallback(async () => {
+    // The press became a recording, so the tap that follows release is not a
+    // request for a photo.
+    if (recordingRef.current || mode === 'video') return;
     if (stage !== 'idle') return;
     if (!cameraRef.current) {
       setError('Kameraet er ikke klart ennå.');
@@ -116,36 +256,13 @@ export default function CameraScreen() {
 
       setPreview(main.uri);
 
-      setStage('selfie');
-      setFacing('front');
-
-      // Count down visibly, one tick per second, so the shot is never a
-      // surprise. The haptic matters as much as the number: it lands even if
-      // you are looking at your own face rather than the digit.
-      for (let remaining = SELFIE_COUNTDOWN; remaining > 0; remaining -= 1) {
-        setCountdown(remaining);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-      setCountdown(null);
-
-      let selfieUri: string | null = null;
-      try {
-        const selfie = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          shutterSound: false,
-        });
-        selfieUri = selfie?.uri ?? null;
-      } catch {
-        // A missing selfie is not fatal — the post still works without one,
-        // exactly as it did when the Sanity `selfie` field was left empty.
-        selfieUri = null;
-      }
+      const selfieUri = await captureSelfie();
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       setPendingCapture({
         imageUri: main.uri,
+        videoUri: null,
         selfieUri,
         exif: main.exif ?? null,
         width: main.width,
@@ -165,7 +282,7 @@ export default function CameraScreen() {
       setPreview(null);
       setCountdown(null);
     }
-  }, [router, stage]);
+  }, [captureSelfie, mode, router, stage]);
 
   const pickFromLibrary = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -179,6 +296,7 @@ export default function CameraScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPendingCapture({
       imageUri: asset.uri,
+      videoUri: null,
       selfieUri: null,
       exif: asset.exif ?? null,
       width: asset.width,
@@ -220,7 +338,7 @@ export default function CameraScreen() {
         style={{ flex: 1 }}
         facing={facing}
         flash={flash}
-        mode="picture"
+        mode={mode}
         animateShutter={false}
         // Passing a back-camera lens while the front is active would ask for a
         // device that does not exist on this side.
@@ -353,15 +471,18 @@ export default function CameraScreen() {
             {/* On a pill, because this sits over the live preview: grey text
                 on whatever the camera happens to be pointed at is legible
                 against a dark room and invisible against a bright sky. */}
-            <View className="rounded-full bg-overlay px-3 py-1.5">
+            <View
+              className={`rounded-full px-3 py-1.5 ${recording ? 'bg-alert' : 'bg-overlay'}`}>
               <Text className={`text-sm ${busy ? 'text-ink' : 'text-ink opacity-80'}`}>
-                {stage === 'back'
-                  ? 'Tar bildet…'
-                  : stage === 'selfie'
-                    ? 'Selfie om litt…'
-                    : ready
-                      ? 'Ett trykk tar begge bildene'
-                      : 'Starter kameraet…'}
+                {recording
+                  ? `${Math.max(MAX_VIDEO_SECONDS - elapsed, 0).toFixed(1)} s igjen`
+                  : stage === 'back'
+                    ? 'Tar bildet…'
+                    : stage === 'selfie'
+                      ? 'Selfie om litt…'
+                      : ready
+                        ? 'Ett trykk tar bildet · hold for video'
+                        : 'Starter kameraet…'}
               </Text>
             </View>
 
@@ -390,9 +511,26 @@ export default function CameraScreen() {
                 accessibilityLabel="Ta bilde"
                 disabled={busy}
                 onPress={capturePair}
-                className="h-20 w-20 items-center justify-center rounded-full border-4 border-ink active:opacity-70">
-                {busy ? (
+                onPressIn={onShutterIn}
+                onPressOut={onShutterOut}
+                // Handled through press-in and press-out rather than
+                // onLongPress, because the recording has to stop on release
+                // and onLongPress gives no release event.
+                className={`h-20 w-20 items-center justify-center rounded-full border-4 active:opacity-70 ${
+                  recording ? 'border-alert' : 'border-ink'
+                }`}>
+                {busy && !recording ? (
                   <ActivityIndicator color="#ffffff" />
+                ) : recording ? (
+                  // A square, the way every camera signals "recording" — and
+                  // it shrinks as the ten seconds run down.
+                  <View
+                    className="rounded-lg bg-alert"
+                    style={{
+                      width: 40 - (elapsed / MAX_VIDEO_SECONDS) * 12,
+                      height: 40 - (elapsed / MAX_VIDEO_SECONDS) * 12,
+                    }}
+                  />
                 ) : (
                   <View className="h-16 w-16 rounded-full bg-ink" />
                 )}

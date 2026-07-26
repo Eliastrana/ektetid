@@ -27,17 +27,21 @@ export type PublishProgress = 'processing' | 'uploading' | 'saving';
  * the owner out of the first path segment, so this layout is load-bearing —
  * see supabase/migrations/0004_storage.sql.
  */
-function objectPath(userId: string): string {
-  return `${userId}/${Crypto.randomUUID()}.jpg`;
+function objectPath(userId: string, extension = 'jpg'): string {
+  return `${userId}/${Crypto.randomUUID()}.${extension}`;
 }
 
-async function upload(localUri: string, userId: string): Promise<string> {
-  const path = objectPath(userId);
+async function upload(
+  localUri: string,
+  userId: string,
+  contentType = 'image/jpeg'
+): Promise<string> {
+  const path = objectPath(userId, contentType.startsWith('video/') ? 'mov' : 'jpg');
   const bytes = await new File(localUri).arrayBuffer();
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
+    .upload(path, bytes, { contentType, upsert: false });
 
   if (error) throw error;
   return path;
@@ -63,6 +67,19 @@ export async function publishPost(
 
   onProgress?.('uploading');
   const imagePath = await upload(image.uri, userId);
+
+  /*
+   * The clip, uploaded as it came off the camera.
+   *
+   * Not re-encoded: the device already wrote H.264 at a sane bitrate, and a
+   * second pass would cost seconds of the user's time to save megabytes that
+   * the ten-second cap has already bounded. iOS writes QuickTime, hence the
+   * mime type — the bucket accepts both that and mp4.
+   */
+  let videoPath: string | null = null;
+  if (input.capture.videoUri) {
+    videoPath = await upload(input.capture.videoUri, userId, 'video/quicktime');
+  }
   let selfiePath: string | null = null;
   if (selfie) {
     try {
@@ -89,6 +106,7 @@ export async function publishPost(
     p_luminance: image.luminance,
     p_latitude: input.coordinates?.latitude ?? undefined,
     p_longitude: input.coordinates?.longitude ?? undefined,
+    p_video_path: videoPath ?? undefined,
   });
 
   if (error) {
@@ -96,7 +114,11 @@ export async function publishPost(
     // than leaving them to count against the user's storage forever.
     await supabase.storage
       .from(BUCKET)
-      .remove([imagePath, ...(selfiePath ? [selfiePath] : [])]);
+      .remove([
+        imagePath,
+        ...(selfiePath ? [selfiePath] : []),
+        ...(videoPath ? [videoPath] : []),
+      ]);
     throw error;
   }
 

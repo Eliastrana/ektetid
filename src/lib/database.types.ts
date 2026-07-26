@@ -329,6 +329,7 @@ export type Database = {
           selfie_path: string | null
           taken_at: string
           title: string | null
+          video_path: string | null
         }
         Insert: {
           album_id: string
@@ -347,6 +348,7 @@ export type Database = {
           selfie_path?: string | null
           taken_at?: string
           title?: string | null
+          video_path?: string | null
         }
         Update: {
           album_id?: string
@@ -365,6 +367,7 @@ export type Database = {
           selfie_path?: string | null
           taken_at?: string
           title?: string | null
+          video_path?: string | null
         }
         Relationships: [
           {
@@ -558,6 +561,7 @@ export type Database = {
           p_selfie_path?: string
           p_taken_at?: string
           p_title?: string
+          p_video_path?: string
         }
         Returns: {
           album_id: string
@@ -576,6 +580,7 @@ export type Database = {
           selfie_path: string | null
           taken_at: string
           title: string | null
+          video_path: string | null
         }
         SetofOptions: {
           from: "*"

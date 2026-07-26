@@ -25,6 +25,7 @@ import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
 import { ReportSheet } from '@/components/report-sheet';
 import { PostTile } from '@/components/post-tile';
+import { PostVideo } from '@/components/post-video';
 import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
 import { StoryProgress } from '@/components/story-progress';
@@ -598,7 +599,11 @@ export default function AlbumScreen() {
     <>
       <GestureDetector gesture={gesture}>
         <Animated.View className="flex-1" style={photoStyle}>
-          {current?.imageUrl ? (
+          {current?.videoUrl ? (
+            /* Keyed on the post so moving to the next clip builds a new player
+               rather than reusing one still pointed at the previous file. */
+            <PostVideo key={current.id} uri={current.videoUrl} active />
+          ) : current?.imageUrl ? (
             <Image
               source={{ uri: current.imageUrl }}
               placeholder={current.blurhash ? { blurhash: current.blurhash } : undefined}

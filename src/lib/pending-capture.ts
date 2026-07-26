@@ -7,7 +7,16 @@
  */
 
 export type PendingCapture = {
+  /**
+   * Always a still.
+   *
+   * For a video post this is the first frame, extracted before publishing, so
+   * that the grid, the map pin, the blurhash and the notification all have a
+   * picture to work with without knowing anything about video.
+   */
   imageUri: string;
+  /** The clip, when the shutter was held rather than tapped. */
+  videoUri: string | null;
   selfieUri: string | null;
   exif: Record<string, unknown> | null;
   width: number;

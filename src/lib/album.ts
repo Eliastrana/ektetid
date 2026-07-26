@@ -7,6 +7,8 @@ export type PostAuthor = { id: string; username: string; display_name: string | 
 export type AlbumPost = Post & {
   imageUrl: string | null;
   selfieUrl: string | null;
+  /** Present only on a video post; imageUrl still holds its first frame. */
+  videoUrl: string | null;
   author: PostAuthor | null;
 };
 
@@ -49,7 +51,9 @@ export async function fetchAlbum(albumId: string): Promise<AlbumDetail> {
   if (postsResult.error) throw postsResult.error;
 
   const paths = postsResult.data.flatMap((post) =>
-    [post.image_path, post.selfie_path].filter((path): path is string => !!path)
+    [post.image_path, post.selfie_path, post.video_path].filter(
+      (path): path is string => !!path
+    )
   );
   const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
 
@@ -71,6 +75,7 @@ export async function fetchAlbum(albumId: string): Promise<AlbumDetail> {
       ...post,
       imageUrl: urls.get(post.image_path) ?? null,
       selfieUrl: post.selfie_path ? (urls.get(post.selfie_path) ?? null) : null,
+      videoUrl: post.video_path ? (urls.get(post.video_path) ?? null) : null,
       author: (post.author ?? null) as unknown as PostAuthor | null,
     })),
   };

@@ -113,8 +113,8 @@
         "expo-camera",
         {
           "cameraPermission": "EkteTid bruker kameraet for å ta bildene du legger ut.",
-          "microphonePermission": false,
-          "recordAudioAndroid": false,
+          "microphonePermission": "EkteTid bruker mikrofonen for å ta opp lyd i videoene du legger ut.",
+          "recordAudioAndroid": true,
           "barcodeScannerEnabled": false
         }
       ],
@@ -159,7 +159,8 @@
       ],
       "expo-sharing",
       "expo-maps",
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
