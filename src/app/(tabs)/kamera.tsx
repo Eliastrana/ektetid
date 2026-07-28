@@ -386,11 +386,6 @@ export default function CameraScreen() {
         // The takePictureAsync option of the same name is deprecated in SDK 57.
         mirror
         onAvailableLensesChanged={({ lenses }) => {
-          // Both the raw names and what they were classified as: the names
-          // differ by model and by language, so a wrong pick is only
-          // diagnosable if you can see what there was to choose from.
-          console.log('[kamera] lenses:', lenses.join(' | '));
-          console.log('[kamera] chose:', JSON.stringify(backLensOptions(lenses)));
           setAvailableLenses(lenses);
           // Settle on the plain wide lens once the names are known, so the
           // control starts on 1 rather than on whatever the system defaulted to.
