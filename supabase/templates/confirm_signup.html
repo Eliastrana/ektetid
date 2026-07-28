@@ -1,0 +1,27 @@
+<!--
+  First sign-in email for EkteTid — the one a brand-new address gets.
+
+  Supabase picks the template by what the request turns out to be, not by what
+  the app called: an address it has never seen is a *signup*, so it sends this
+  template, and only from the second time onwards does it send Magic Link. The
+  app calls signInWithOtp either way and cannot tell the difference.
+
+  So this has to render {{ .Token }} exactly like magic_link.html does.
+  Without it, the stock template renders only {{ .ConfirmationURL }} and every
+  user's very first email arrives as a link with no code in it — the one email
+  they get before deciding whether the app works.
+
+  Paste the same markup into Authentication → Emails → Confirm signup in the
+  dashboard for the cloud project. This file only governs local Supabase.
+-->
+<h2>Velkommen til EkteTid</h2>
+
+<p>Koden din er:</p>
+
+<p style="font-size: 32px; letter-spacing: 8px; font-weight: 600;">{{ .Token }}</p>
+
+<p>Koden er gyldig i én time og kan bare brukes én gang.</p>
+
+<p style="color: #6b6f76; font-size: 12px;">
+  Har du ikke bedt om å logge inn? Da kan du se bort fra denne e-posten.
+</p>

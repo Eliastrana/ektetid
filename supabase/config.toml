@@ -245,6 +245,15 @@ otp_expiry = 3600
 
 # The app signs in with a six-digit code, which the stock template does not
 # include — it only renders {{ .ConfirmationURL }}. See the template file.
+#
+# Both templates are needed, not just magic_link: Supabase sends `confirmation`
+# for an address it has never seen and `magic_link` for one it has, while the
+# app calls signInWithOtp for both. Overriding only one leaves every user's
+# first email broken and every later one fine.
+[auth.email.template.confirmation]
+subject = "Din kode til EkteTid"
+content_path = "./supabase/templates/confirm_signup.html"
+
 [auth.email.template.magic_link]
 subject = "Din kode til EkteTid"
 content_path = "./supabase/templates/magic_link.html"
