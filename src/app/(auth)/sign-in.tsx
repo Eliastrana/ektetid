@@ -11,10 +11,20 @@ import {
   isAppleSignInAvailable,
   sendEmailCode,
   signInWithApple,
+  signInWithPassword,
   verifyEmailCode,
 } from '@/lib/auth';
 
 type Busy = 'apple' | 'email' | null;
+
+/**
+ * Which of the three ways in is on screen.
+ *
+ * 'email' offers Apple and an address; 'code' takes the six digits we mailed;
+ * 'password' is for the minority who set one, and is never the default — most
+ * people have no password to type.
+ */
+type Step = 'email' | 'code' | 'password';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,7 +35,8 @@ export default function SignInScreen() {
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [codeSent, setCodeSent] = useState(false);
+  const [password, setPassword] = useState('');
+  const [step, setStep] = useState<Step>('email');
 
   useEffect(() => {
     void isAppleSignInAvailable().then(setAppleAvailable);
@@ -65,7 +76,7 @@ export default function SignInScreen() {
               <Text className="mb-1 text-center text-sm text-alert">{error}</Text>
             ) : null}
 
-            {codeSent ? (
+            {step === 'code' ? (
               <>
                 <Text className="mb-1 text-center text-sm text-muted">
                   Vi sendte en kode til {email.trim()}
@@ -103,12 +114,71 @@ export default function SignInScreen() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => {
-                    setCodeSent(false);
+                    setStep('email');
                     setCode('');
                     setError(null);
                   }}>
                   <Text className="py-2 text-center text-sm text-muted">
                     Bruk en annen e-post
+                  </Text>
+                </Pressable>
+              </>
+            ) : step === 'password' ? (
+              <>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="username"
+                  placeholder="din@epost.no"
+                  placeholderTextColor="#6b6f76"
+                  selectionColor="#ffffff"
+                  className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+                />
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry
+                  textContentType="password"
+                  placeholder="Passord"
+                  placeholderTextColor="#6b6f76"
+                  selectionColor="#ffffff"
+                  className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!emailValid || password.length === 0 || busy !== null}
+                  onPress={() => run('email', () => signInWithPassword(email, password))}
+                  className={`h-14 items-center justify-center rounded-tile active:opacity-80 ${
+                    emailValid && password.length > 0 ? 'bg-ink' : 'bg-surface-raised'
+                  }`}>
+                  {busy === 'email' ? (
+                    <ActivityIndicator color="#000000" />
+                  ) : (
+                    <Text
+                      className={`text-base ${
+                        emailValid && password.length > 0 ? 'text-canvas' : 'text-muted'
+                      }`}>
+                      Logg inn
+                    </Text>
+                  )}
+                </Pressable>
+                {/* The way back for anyone who set a password and forgot it:
+                    the code still works, and setting a new one lives in
+                    Innstillinger once they are in. */}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setStep('email');
+                    setPassword('');
+                    setError(null);
+                  }}>
+                  <Text className="py-2 text-center text-sm text-muted">
+                    Få en kode på e-post i stedet
                   </Text>
                 </Pressable>
               </>
@@ -148,7 +218,7 @@ export default function SignInScreen() {
                   onPress={() =>
                     run('email', async () => {
                       await sendEmailCode(email);
-                      setCodeSent(true);
+                      setStep('code');
                     })
                   }
                   className={`h-14 items-center justify-center rounded-tile active:opacity-80 ${
@@ -161,6 +231,18 @@ export default function SignInScreen() {
                       Send kode
                     </Text>
                   )}
+                </Pressable>
+                {/* Secondary on purpose. A password is opt-in, so for almost
+                    everyone the code above is the only way in that exists. */}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setStep('password');
+                    setError(null);
+                  }}>
+                  <Text className="py-2 text-center text-sm text-muted">
+                    Logg inn med passord
+                  </Text>
                 </Pressable>
               </>
             )}

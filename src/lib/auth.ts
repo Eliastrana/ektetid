@@ -145,6 +145,45 @@ export async function verifyEmailCode(email: string, code: string): Promise<void
   if (error) throw error;
 }
 
+/** The shortest password we will set. Supabase itself only demands six. */
+export const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * Sign in with a password, for accounts that have chosen to set one.
+ *
+ * Offered alongside the emailed code rather than instead of it. Most people
+ * never set a password and never see this path; those who do get to skip
+ * waiting on a mail. It is also what App Review uses, since a reviewer has no
+ * way to read the demo account's inbox.
+ *
+ * Deliberately does not create accounts. Signing up is the code's job, so a
+ * typo'd address here fails as a wrong password rather than silently making a
+ * second empty account.
+ */
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Set or replace the password on the signed-in account.
+ *
+ * Requires a live session, which is what makes this safe without asking for the
+ * old password: whoever is calling has already proved who they are, either by
+ * Apple or by a code sent to their inbox.
+ *
+ * There is no reset flow, and none is needed — someone who forgets their
+ * password signs in with a code as they always could, then comes back here.
+ * The emailed code is the recovery path.
+ */
+export async function setPassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function signOut(): Promise<void> {
   // Before the session goes: deleting the row needs the policy to still see
   // this user as its owner. Left behind, the device would keep receiving

@@ -92,6 +92,22 @@ export default function SettingsScreen() {
                 {session?.user.email ?? 'Skjult av Apple'}
               </Text>
             </View>
+            <View className="h-px bg-glass-border" />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/passord')}
+              className="flex-row items-center px-4 py-3 active:bg-glass-strong">
+              <View className="flex-1">
+                <Text className="text-xs text-muted">Passord</Text>
+                <Text className="text-base text-ink">Velg et passord</Text>
+              </View>
+              <SymbolView
+                name="chevron.right"
+                size={14}
+                tintColor="#6b6f76"
+                fallback={<Text className="text-base text-muted">›</Text>}
+              />
+            </Pressable>
           </View>
 
           <Text className="mb-2 mt-8 text-sm text-muted">Farlig område</Text>
