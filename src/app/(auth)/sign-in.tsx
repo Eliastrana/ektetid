@@ -194,11 +194,16 @@ export default function SignInScreen() {
                   />
                 ) : null}
 
-                <View className="my-2 flex-row items-center gap-3">
-                  <View className="h-px flex-1 bg-glass-border" />
-                  <Text className="text-xs text-muted">eller</Text>
-                  <View className="h-px flex-1 bg-glass-border" />
-                </View>
+                {/* Only when there is something above to be an alternative to.
+                    On web there is no Apple button, and the divider separated
+                    nothing from nothing. */}
+                {appleAvailable ? (
+                  <View className="my-2 flex-row items-center gap-3">
+                    <View className="h-px flex-1 bg-glass-border" />
+                    <Text className="text-xs text-muted">eller</Text>
+                    <View className="h-px flex-1 bg-glass-border" />
+                  </View>
+                ) : null}
 
                 <TextInput
                   value={email}
