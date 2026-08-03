@@ -72,47 +72,61 @@ export function NotificationSettings({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <View className="mt-3 items-center rounded-tile bg-glass py-8">
-        <ActivityIndicator color="#ffffff" />
-      </View>
+      <>
+        <Heading />
+        <View className="mt-3 items-center rounded-tile bg-glass py-8">
+          <ActivityIndicator color="#ffffff" />
+        </View>
+      </>
     );
   }
 
   return (
-    <View className="mt-3 overflow-hidden rounded-tile bg-glass">
-      <Row
-        title="Daglig påminnelse"
-        detail="Et lite dytt klokka 19 om å ta dagens bilde"
-        value={daily}
-        onChange={(value) => void toggleDaily(value)}
-      />
-
-      {PREF_LABELS.map(({ key, title, detail }) => (
+    <>
+      <Heading />
+      <View className="mt-3 overflow-hidden rounded-tile bg-glass">
         <Row
-          key={key}
-          title={title}
-          detail={detail}
-          value={prefs[key]}
-          onChange={() => toggle(key)}
+          title="Daglig påminnelse"
+          detail="Et lite dytt klokka 19 om å ta dagens bilde"
+          value={daily}
+          onChange={(value) => void toggleDaily(value)}
         />
-      ))}
 
-      {/*
-        Only shown once a request has actually been refused. Saying "varsler er
-        avslått" to someone who has never been asked is both wrong and alarming.
-      */}
-      {!granted ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void Linking.openSettings()}
-          className="border-t border-glass-border px-4 py-3 active:opacity-70">
-          <Text className="text-sm text-alert">
-            Varsler er slått av for EkteTid. Trykk for å åpne Innstillinger.
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
+        {PREF_LABELS.map(({ key, title, detail }) => (
+          <Row
+            key={key}
+            title={title}
+            detail={detail}
+            value={prefs[key]}
+            onChange={() => toggle(key)}
+          />
+        ))}
+
+        {/*
+          Only shown once a request has actually been refused. Saying "varsler er
+          avslått" to someone who has never been asked is both wrong and alarming.
+        */}
+        {!granted ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void Linking.openSettings()}
+            className="border-t border-glass-border px-4 py-3 active:opacity-70">
+            <Text className="text-sm text-alert">
+              Varsler er slått av for EkteTid. Trykk for å åpne Innstillinger.
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </>
   );
+}
+
+/**
+ * Owned by this component rather than by the profile screen, so that the
+ * heading and the switches it introduces appear and disappear together.
+ */
+function Heading() {
+  return <Text className="mb-1 mt-7 text-sm text-muted">Varsler</Text>;
 }
 
 function Row({

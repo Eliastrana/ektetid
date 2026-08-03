@@ -142,7 +142,8 @@ export default function ProfileScreen() {
                 </View>
               </Pressable>
 
-              <Text className="mb-1 mt-7 text-sm text-muted">Varsler</Text>
+              {/* Heading included, so that the whole section disappears
+                  together on a platform that has no notifications. */}
               {userId ? <NotificationSettings userId={userId} /> : null}
 
               <Text className="mb-1 mt-7 text-sm text-muted">Albumene dine</Text>
