@@ -44,3 +44,6 @@ example
 /ios
 /android
 scripts/.import-ledger.json
+
+# web export
+/dist

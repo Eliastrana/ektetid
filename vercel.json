@@ -1,0 +1,11 @@
+{
+  "buildCommand": "expo export -p web",
+  "outputDirectory": "dist",
+  "framework": null,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/album/:id", "destination": "/album/[id]" },
+    { "source": "/profil/:id", "destination": "/profil/[id]" },
+    { "source": "/rediger-album/:id", "destination": "/rediger-album/[id]" }
+  ]
+}
