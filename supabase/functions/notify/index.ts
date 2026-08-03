@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
+import { sendWebPush, type PushContent, type Subscription } from './web-push.ts';
+
 /**
  * Fan a single event out to the people who should hear about it.
  *
@@ -140,6 +142,18 @@ async function tokensFor(admin: SupabaseClient, recipients: string[]): Promise<s
   return (data ?? []).map((row) => row.token);
 }
 
+async function subscriptionsFor(
+  admin: SupabaseClient,
+  recipients: string[]
+): Promise<Subscription[]> {
+  if (recipients.length === 0) return [];
+  const { data } = await admin
+    .from('web_push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .in('user_id', recipients);
+  return (data ?? []) as Subscription[];
+}
+
 async function send(messages: Message[]): Promise<void> {
   if (messages.length === 0) return;
 
@@ -151,6 +165,45 @@ async function send(messages: Message[]): Promise<void> {
       body: JSON.stringify(messages.slice(i, i + 100)),
     });
   }
+}
+
+/**
+ * Deliver every browser push, and forget the subscriptions that are finished.
+ *
+ * A push service answers 404 or 410 once a subscription can never work again —
+ * the browser was uninstalled, the data cleared, permission revoked. Those rows
+ * would otherwise be retried on every event for the life of the account, so the
+ * reply is treated as the deregistration it is.
+ *
+ * Sent in parallel because each goes to a different service, and one slow
+ * vendor should not delay the rest.
+ */
+async function sendAll(
+  admin: SupabaseClient,
+  jobs: { subscription: Subscription; content: PushContent }[]
+): Promise<number> {
+  if (jobs.length === 0) return 0;
+
+  const vapid = {
+    publicKey: Deno.env.get('VAPID_PUBLIC_KEY') ?? '',
+    privateKey: Deno.env.get('VAPID_PRIVATE_KEY') ?? '',
+    subject: Deno.env.get('VAPID_SUBJECT') ?? 'mailto:eliastrana@gmail.com',
+  };
+
+  // Without keys there is nothing to sign with, and every push would be
+  // rejected. Silent rather than fatal: the phones have already been sent to.
+  if (!vapid.publicKey || !vapid.privateKey) return 0;
+
+  const results = await Promise.all(
+    jobs.map((job) => sendWebPush(job.subscription, job.content, vapid))
+  );
+
+  const gone = results.filter((result) => result.gone).map((result) => result.endpoint);
+  if (gone.length > 0) {
+    await admin.from('web_push_subscriptions').delete().in('endpoint', gone);
+  }
+
+  return results.filter((result) => result.ok).length;
 }
 
 Deno.serve(async (request) => {
@@ -188,14 +241,36 @@ Deno.serve(async (request) => {
   const actorName = displayName(actor);
 
   const messages: Message[] = [];
+  const webJobs: { subscription: Subscription; content: PushContent }[] = [];
 
-  const queue = async (recipients: string[], column: string, build: (token: string) => Message) => {
+  /**
+   * Decide who hears about this, then hand the same sentence to both
+   * transports.
+   *
+   * Recipient resolution — blocks, then preferences — is the part that must not
+   * differ between a phone and a browser, so it happens once here and only
+   * delivery forks below.
+   */
+  const queue = async (recipients: string[], column: string, content: PushContent) => {
     const permitted = await allowedBy(
       admin,
       column,
       await withoutBlocked(admin, user.id, [...new Set(recipients)].filter(Boolean))
     );
-    for (const token of await tokensFor(admin, permitted)) messages.push(build(token));
+
+    for (const token of await tokensFor(admin, permitted)) {
+      messages.push({
+        to: token,
+        title: content.title,
+        body: content.body,
+        data: { url: content.url },
+        sound: 'default',
+      });
+    }
+
+    for (const subscription of await subscriptionsFor(admin, permitted)) {
+      webJobs.push({ subscription, content });
+    }
   };
 
   if (kind === 'friend_request' || kind === 'friend_accepted') {
@@ -216,15 +291,13 @@ Deno.serve(async (request) => {
     if (pending && edge.status !== 'pending') return new Response('ok', { status: 200 });
     if (!pending && edge.status !== 'accepted') return new Response('ok', { status: 200 });
 
-    await queue([id], 'friend_requests', (to) => ({
-      to,
+    await queue([id], 'friend_requests', {
       title: pending ? 'Ny venneforespørsel' : 'Dere er venner',
       body: pending
         ? `${actorName} vil bli venn med deg.`
         : `${actorName} godtok venneforespørselen din.`,
-      data: { url: pending ? 'ektetid:///venner' : `ektetid:///profil/${user.id}` },
-      sound: 'default',
-    }));
+      url: pending ? 'ektetid:///venner' : `ektetid:///profil/${user.id}`,
+    });
   }
 
   if (kind === 'comment') {
@@ -245,13 +318,11 @@ Deno.serve(async (request) => {
 
     // Commenting on your own photo should not notify you.
     if (post && post.author_id !== user.id) {
-      await queue([post.author_id], 'comments', (to) => ({
-        to,
+      await queue([post.author_id], 'comments', {
         title: 'Ny kommentar',
         body: `${actorName}: ${String(comment.body).slice(0, 120)}`,
-        data: { url: `ektetid:///album/${post.album_id}` },
-        sound: 'default',
-      }));
+        url: `ektetid:///album/${post.album_id}`,
+      });
     }
   }
 
@@ -276,13 +347,11 @@ Deno.serve(async (request) => {
     if (!like) return new Response('Forbidden', { status: 403 });
 
     if (post.author_id !== user.id) {
-      await queue([post.author_id], 'likes', (to) => ({
-        to,
+      await queue([post.author_id], 'likes', {
         title: 'Nytt hjerte',
         body: `${actorName} likte bildet ditt.`,
-        data: { url: `ektetid:///album/${post.album_id}` },
-        sound: 'default',
-      }));
+        url: `ektetid:///album/${post.album_id}`,
+      });
     }
   }
 
@@ -304,32 +373,26 @@ Deno.serve(async (request) => {
     // album. A different switch and a different sentence: this is an album
     // they are part of, not merely one they can see.
     const collaborators = [...memberIds, ownerId].filter((who) => who && who !== user.id);
-    await queue(collaborators, 'shared_album_posts', (to) => ({
-      to,
+    await queue(collaborators, 'shared_album_posts', {
       title: albumTitle,
       body: `${actorName} la til et bilde i «${albumTitle}».`,
-      data: { url },
-      sound: 'default',
-    }));
+      url,
+    });
 
     // Everyone else who follows the album's owner. Excluded if they are already
     // being told as a collaborator — one event, one notification.
     const alsoTold = new Set(collaborators);
-    await queue(
-      friendIds.filter((who) => !alsoTold.has(who)),
-      'friend_posts',
-      (to) => ({
-        to,
-        title: 'Nytt øyeblikk',
-        body: `${actorName} la ut et nytt bilde.`,
-        data: { url },
-        sound: 'default',
-      })
-    );
+    await queue(friendIds.filter((who) => !alsoTold.has(who)), 'friend_posts', {
+      title: 'Nytt øyeblikk',
+      body: `${actorName} la ut et nytt bilde.`,
+      url,
+    });
   }
 
   await send(messages);
-  return new Response(JSON.stringify({ sent: messages.length }), {
+  const web = await sendAll(admin, webJobs);
+
+  return new Response(JSON.stringify({ sent: messages.length, web }), {
     headers: { 'Content-Type': 'application/json' },
   });
 });
