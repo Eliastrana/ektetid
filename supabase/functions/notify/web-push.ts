@@ -259,13 +259,28 @@ export async function sendWebPush(
       body: body as unknown as BodyInit,
     });
 
+    /*
+     * Logged because a rejected push is otherwise completely silent: the
+     * browser shows nothing, the caller sees a count, and the reason lives only
+     * in a response nobody read. 401 and 403 mean the VAPID signature was not
+     * accepted; 400 usually means the encrypted body is malformed.
+     */
+    if (!response.ok) {
+      console.error(
+        `web push ${response.status} ${new URL(subscription.endpoint).host}: ${(
+          await response.text()
+        ).slice(0, 300)}`
+      );
+    }
+
     return {
       endpoint: subscription.endpoint,
       ok: response.ok,
       gone: response.status === 404 || response.status === 410,
     };
-  } catch {
+  } catch (caught) {
     // One unreachable push service must not stop the rest of the fan-out.
+    console.error(`web push threw: ${caught instanceof Error ? caught.message : String(caught)}`);
     return { endpoint: subscription.endpoint, ok: false, gone: false };
   }
 }

@@ -192,7 +192,12 @@ async function sendAll(
 
   // Without keys there is nothing to sign with, and every push would be
   // rejected. Silent rather than fatal: the phones have already been sent to.
-  if (!vapid.publicKey || !vapid.privateKey) return 0;
+  if (!vapid.publicKey || !vapid.privateKey) {
+    console.error('web push skipped: VAPID_PUBLIC_KEY or VAPID_PRIVATE_KEY is not set');
+    return 0;
+  }
+
+  console.log(`web push: ${jobs.length} subscription(s)`);
 
   const results = await Promise.all(
     jobs.map((job) => sendWebPush(job.subscription, job.content, vapid))
