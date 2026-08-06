@@ -578,6 +578,7 @@ export type Database = {
       are_friends: { Args: { a: string; b: string }; Returns: boolean }
       can_edit_album: { Args: { album: string }; Returns: boolean }
       can_see_album: { Args: { album: string }; Returns: boolean }
+      can_see_album_media: { Args: { object_name: string }; Returns: boolean }
       can_see_post: { Args: { post: string }; Returns: boolean }
       create_post: {
         Args: {

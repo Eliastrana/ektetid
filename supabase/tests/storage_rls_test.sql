@@ -1,8 +1,8 @@
 -- Storage RLS regression test.
 --
--- Photo bytes are guarded by path convention: '{author_id}/{uuid}.jpg'. The
--- policies in 0004_storage.sql derive the owner from the first path segment,
--- so this asserts that convention actually holds up against a stranger.
+-- Uploads are guarded by path convention: '{author_id}/{uuid}.jpg'. Reads
+-- inherit from the album post that references the object, so this asserts that
+-- a friend can read album media while a stranger cannot.
 
 begin;
 
@@ -23,6 +23,18 @@ values ('11111111-1111-1111-1111-111111111111',
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+
+insert into public.albums (id, owner_id, title)
+values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        '11111111-1111-1111-1111-111111111111',
+        'Alice sitt album');
+
+insert into public.posts (id, album_id, author_id, image_path, position)
+values ('aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa',
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        '11111111-1111-1111-1111-111111111111',
+        '11111111-1111-1111-1111-111111111111/photo.jpg',
+        0);
 
 insert into storage.objects (bucket_id, name, owner)
 values ('photos',
@@ -50,7 +62,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Bob is a friend: he can read the bytes
+-- Bob is a friend: he can read media from Alice's visible album
 -- ---------------------------------------------------------------------------
 
 set local request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}';

@@ -151,11 +151,16 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Storage: bob and carol are not friends of each other's co-members, but
--- collaborators must still be able to load each other's photos.
+-- Storage: album visibility applies to every object in the album, regardless
+-- of who uploaded it. Carol is Bob's friend but not Alice's, so Alice's photo
+-- is the important regression case.
 -- ---------------------------------------------------------------------------
 
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+insert into public.posts (id, album_id, author_id, image_path, position) values
+ ('b0000000-0000-0000-0000-00000000000d','aaaaaaaa-0000-0000-0000-00000000000a',
+  '11111111-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111/1.jpg',0);
+
 insert into storage.objects (bucket_id, name, owner)
 values ('photos','11111111-1111-1111-1111-111111111111/1.jpg',
         '11111111-1111-1111-1111-111111111111');
@@ -168,6 +173,14 @@ begin
   end if;
 end $$;
 
+set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}';
+do $$
+begin
+  if (select count(*) from storage.objects where bucket_id='photos') <> 1 then
+    raise exception 'friend of collaborator cannot load another member''s photo';
+  end if;
+end $$;
+
 set local request.jwt.claims = '{"sub":"44444444-4444-4444-4444-444444444444","role":"authenticated"}';
 do $$
 begin
@@ -175,6 +188,11 @@ begin
     raise exception 'LEAK: stranger can load photos from a shared album';
   end if;
 end $$;
+
+-- Restore the two-post fixture expected by the reorder assertions below.
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+delete from public.posts
+ where id = 'b0000000-0000-0000-0000-00000000000d';
 
 -- ---------------------------------------------------------------------------
 -- Reordering

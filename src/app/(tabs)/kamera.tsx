@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, ZoomIn, runOnJS } from 'react-native-reanimated';
 
 import Svg, { Circle } from 'react-native-svg';
@@ -353,16 +353,24 @@ export default function CameraScreen() {
   }
 
   if (!permission.granted) {
+    const canAskForCamera = permission.canAskAgain;
+
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-canvas px-8">
         <Text className="text-center text-xl text-ink">
-          EkteTid trenger kameraet for å ta bilder.
+          {canAskForCamera
+            ? 'EkteTid bruker kameraet til å ta bilder og video du kan dele i album.'
+            : 'Kameratilgang er slått av. Du kan slå den på i Innstillinger for å ta bilder og video.'}
         </Text>
         <Pressable
           accessibilityRole="button"
-          onPress={() => void requestPermission()}
+          onPress={() =>
+            void (canAskForCamera ? requestPermission() : Linking.openSettings())
+          }
           className="h-14 items-center justify-center rounded-tile bg-ink px-8 active:opacity-80">
-          <Text className="text-base text-canvas">Gi tilgang</Text>
+          <Text className="text-base text-canvas">
+            {canAskForCamera ? 'Fortsett' : 'Åpne Innstillinger'}
+          </Text>
         </Pressable>
       </View>
     );
