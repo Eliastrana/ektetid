@@ -2,6 +2,7 @@ import type { FriendshipStatus, Profile } from '@/lib/database.types';
 import { signedUrls } from '@/lib/images';
 import { supabase } from '@/lib/supabase';
 import type { OwnAlbum } from '@/lib/profile';
+import { hasPro } from '@/lib/social';
 
 export type Relationship =
   | { kind: 'self' }
@@ -23,6 +24,7 @@ export type PublicProfile = {
   posts: number;
   heartsReceived: number;
   visibleAlbums: OwnAlbum[];
+  isPro: boolean;
 };
 
 export async function fetchPublicProfile(
@@ -40,7 +42,7 @@ export async function fetchPublicProfile(
   // makes those indistinguishable on purpose.
   if (!profile) return null;
 
-  const [edge, albumRows, postCount, hearts] = await Promise.all([
+  const [edge, albumRows, postCount, hearts, isPro] = await Promise.all([
     supabase
       .from('friendships')
       .select('requester_id, addressee_id, status')
@@ -57,6 +59,7 @@ export async function fetchPublicProfile(
       .from('likes')
       .select('post_id, posts!inner(author_id)', { count: 'exact', head: true })
       .eq('posts.author_id', userId),
+    hasPro(userId),
   ]);
 
   const albums = albumRows.data ?? [];
@@ -75,6 +78,7 @@ export async function fetchPublicProfile(
       ...album,
       coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
     })),
+    isPro,
   };
 }
 

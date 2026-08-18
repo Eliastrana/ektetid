@@ -18,9 +18,11 @@ export type PublishInput = {
   takenAt: Date;
   /** Where the photo was taken, when known. Drives the map. */
   coordinates: Coordinates | null;
+  /** Optional dice rating chosen by the author. */
+  rating: number | null;
 };
 
-export type PublishProgress = 'processing' | 'uploading' | 'saving';
+export type PublishProgress = 'processing' | 'uploading' | 'saving' | 'archiving';
 
 /**
  * Storage paths are always '{user_id}/{uuid}.jpg'. The Storage RLS policy reads
@@ -66,7 +68,10 @@ export async function publishPost(
     : null;
 
   onProgress?.('uploading');
-  const imagePath = await upload(image.uri, userId);
+  const [imagePath, thumbnailPath] = await Promise.all([
+    upload(image.uri, userId),
+    upload(image.thumbnailUri, userId),
+  ]);
 
   /*
    * The clip, uploaded as it came off the camera.
@@ -107,6 +112,11 @@ export async function publishPost(
     p_latitude: input.coordinates?.latitude ?? undefined,
     p_longitude: input.coordinates?.longitude ?? undefined,
     p_video_path: videoPath ?? undefined,
+    p_thumbnail_path: thumbnailPath,
+    p_rating: input.rating ?? undefined,
+    // Kept for backwards-compatible RPC/database shape. New posts are always
+    // stored unfiltered now that the filter picker has been removed.
+    p_filter_name: 'original',
   });
 
   if (error) {
@@ -116,6 +126,7 @@ export async function publishPost(
       .from(BUCKET)
       .remove([
         imagePath,
+        thumbnailPath,
         ...(selfiePath ? [selfiePath] : []),
         ...(videoPath ? [videoPath] : []),
       ]);

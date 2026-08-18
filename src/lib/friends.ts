@@ -9,6 +9,17 @@ export type FriendRequest = {
   outgoing: boolean;
 };
 
+export type FriendSuggestion = Profile & { mutualCount: number };
+
+export async function listFriendSuggestions(limit = 12): Promise<FriendSuggestion[]> {
+  const { data, error } = await supabase.rpc('friend_suggestions', { p_limit: limit });
+  if (error) throw error;
+  return data.map(({ mutual_count, ...profile }) => ({
+    ...profile,
+    mutualCount: Number(mutual_count),
+  }));
+}
+
 /**
  * Find people by username.
  *

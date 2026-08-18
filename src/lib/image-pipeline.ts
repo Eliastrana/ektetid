@@ -9,8 +9,12 @@ const MAX_EDGE = 2048;
 /** Size of the throwaway thumbnail used to derive blurhash and luminance. */
 const PROBE_EDGE = 32;
 
+/** 52pt map pin at @3x, rounded up so the crop stays crisp. */
+const MAP_THUMBNAIL_WIDTH = 192;
+
 export type ProcessedImage = {
   uri: string;
+  thumbnailUri: string;
   width: number;
   height: number;
   blurhash: string;
@@ -88,10 +92,24 @@ export async function processImage(
    * blurhash and the same luminance, because both are averages over a
    * thumbnail that is far smaller than either input.
    */
-  const { blurhash, luminance } = await probe(saved.uri);
+  const thumbnailContext = ImageManipulator.manipulate(saved.uri);
+  thumbnailContext.resize({ width: MAP_THUMBNAIL_WIDTH });
+
+  // These both read the already-resized upload, and neither depends on the
+  // other. Running them together saves a complete native round trip during
+  // publishing without asking the original 12MP asset to decode again.
+  const [{ blurhash, luminance }, thumbnailRendered] = await Promise.all([
+    probe(saved.uri),
+    thumbnailContext.renderAsync(),
+  ]);
+  const thumbnail = await thumbnailRendered.saveAsync({
+    format: SaveFormat.JPEG,
+    compress: 0.72,
+  });
 
   return {
     uri: saved.uri,
+    thumbnailUri: thumbnail.uri,
     width: saved.width,
     height: saved.height,
     blurhash,

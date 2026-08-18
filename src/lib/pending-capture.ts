@@ -15,7 +15,7 @@ export type PendingCapture = {
    * picture to work with without knowing anything about video.
    */
   imageUri: string;
-  /** The clip, when the shutter was held rather than tapped. */
+  /** The clip when the user selected Video and tapped the shutter. */
   videoUri: string | null;
   selfieUri: string | null;
   exif: Record<string, unknown> | null;

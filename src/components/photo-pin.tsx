@@ -32,7 +32,15 @@ export const PIN_HEIGHT = PIN_SIZE;
  *
  * Rendered offscreen and captured, never shown to the user directly.
  */
-export function PhotoPin({ uri, onLoaded }: { uri: string; onLoaded?: () => void }) {
+export function PhotoPin({
+  uri,
+  onLoaded,
+  onError,
+}: {
+  uri: string;
+  onLoaded?: () => void;
+  onError?: () => void;
+}) {
   return (
     <View style={{ width: PIN_WIDTH, height: PIN_HEIGHT, alignItems: 'center' }}>
       {/*
@@ -69,11 +77,15 @@ export function PhotoPin({ uri, onLoaded }: { uri: string; onLoaded?: () => void
         <Image
           source={{ uri }}
           style={{ width: '100%', height: '100%' }}
+          cachePolicy="memory-disk"
+          allowDownscaling
+          enforceEarlyResizing
+          priority="high"
           contentFit="cover"
-          // The capture waits on this rather than on a timer: expo-image
-          // decodes asynchronously, and a guessed delay photographs the empty
-          // placeholder whenever the decode runs long.
-          onLoadEnd={onLoaded}
+          // onLoad only fires after a successful decode. PinFactory allows one
+          // render frame before capture so the offscreen host has painted it.
+          onLoad={onLoaded}
+          onError={onError}
           // No fade — a transition mid-capture bakes a half-faded photo in.
           transition={0}
         />

@@ -1,13 +1,15 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, Switch, Text, View } from 'react-native';
+import { Linking, Pressable, Switch, Text, View } from 'react-native';
+
+import { ErrorNotice } from '@/components/error-notice';
 
 import {
   DEFAULT_PREFS,
+  ensureNotificationPermission,
   PREF_LABELS,
   fetchPrefs,
   isDailyReminderOn,
-  registerForPush,
   savePrefs,
   setDailyReminder,
   type Prefs,
@@ -27,22 +29,37 @@ export function NotificationSettings({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [granted, setGranted] = useState(true);
 
-  const load = useCallback(async () => {
-    try {
-      const [stored, reminder] = await Promise.all([fetchPrefs(userId), isDailyReminderOn()]);
-      setPrefs(stored);
-      setDaily(reminder);
-    } catch {
-      // Falls back to the defaults already in state. A settings list that
-      // refuses to render is worse than one showing what a new account gets.
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+
+    // Neither the network preference read nor the native scheduled-reminder
+    // lookup is allowed to hold the whole settings section behind a spinner.
+    // They settle independently, and defaults become interactive quickly if
+    // either service is slow or the phone is offline.
+    const reveal = setTimeout(() => {
+      if (active) setLoading(false);
+    }, 700);
+
+    const prefsRequest = fetchPrefs(userId)
+      .then((stored) => {
+        if (active) setPrefs(stored);
+      })
+      .catch(() => {});
+    const reminderRequest = isDailyReminderOn()
+      .then((reminder) => {
+        if (active) setDaily(reminder);
+      })
+      .catch(() => {});
+
+    void Promise.allSettled([prefsRequest, reminderRequest]).then(() => {
+      if (active) setLoading(false);
+    });
+
+    return () => {
+      active = false;
+      clearTimeout(reveal);
+    };
+  }, [userId]);
 
   const toggle = useCallback(
     (key: keyof Prefs) => {
@@ -60,22 +77,33 @@ export function NotificationSettings({ userId }: { userId: string }) {
       setDaily(value);
 
       // Turning this on is the first thing here that needs the system
-      // permission, so this is where it is worth asking for it.
+      // permission, so this is where it is worth asking for it. A daily local
+      // reminder does not need an Expo push token or a network round trip.
       if (value) {
-        const allowed = await registerForPush(userId);
+        const allowed = await ensureNotificationPermission();
         setGranted(allowed);
+        if (!allowed) {
+          setDaily(false);
+          return;
+        }
       }
       await setDailyReminder(value).catch(() => setDaily(!value));
     },
-    [userId]
+    []
   );
 
   if (loading) {
     return (
       <>
         <Heading />
-        <View className="mt-3 items-center rounded-tile bg-glass py-8">
-          <ActivityIndicator color="#ffffff" />
+        <View className="mt-3 overflow-hidden rounded-tile bg-glass opacity-60">
+          <Row
+            title="Daglig påminnelse"
+            detail="Laster varslingsvalg…"
+            value={false}
+            disabled
+            onChange={() => {}}
+          />
         </View>
       </>
     );
@@ -110,10 +138,8 @@ export function NotificationSettings({ userId }: { userId: string }) {
           <Pressable
             accessibilityRole="button"
             onPress={() => void Linking.openSettings()}
-            className="border-t border-glass-border px-4 py-3 active:opacity-70">
-            <Text className="text-sm text-alert">
-              Varsler er slått av for EkteTid. Trykk for å åpne Innstillinger.
-            </Text>
+            className="border-t border-glass-border p-3 active:opacity-70">
+            <ErrorNotice message="Varsler er slått av. Trykk for å åpne Innstillinger." />
           </Pressable>
         ) : null}
       </View>
@@ -133,11 +159,13 @@ function Row({
   title,
   detail,
   value,
+  disabled,
   onChange,
 }: {
   title: string;
   detail: string;
   value: boolean;
+  disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -149,7 +177,7 @@ function Row({
       {/* Left as the system switch. The white-on-black override read as
           disabled when it was on, which is the opposite of what a switch is
           for — and iOS users know the green one at a glance. */}
-      <Switch value={value} onValueChange={onChange} />
+      <Switch value={value} onValueChange={onChange} disabled={disabled} />
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { Host, TextInput as NativeTextInput, useNativeState } from '@expo/ui';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
@@ -7,19 +8,20 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import {
   addComment,
   deleteComment,
   fetchComments,
   subscribeToComments,
+  toggleCommentLike,
   type CommentWithAuthor,
 } from '@/lib/social';
 
@@ -29,6 +31,52 @@ type Props = {
   visible: boolean;
   onClose: () => void;
 };
+
+type NativeCommentInputProps = {
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  onChangeText: (value: string) => void;
+  onSubmit: () => void;
+};
+
+/** Native SwiftUI/Compose text field, embedded in the React Native sheet. */
+function NativeCommentInput({
+  value,
+  placeholder,
+  disabled,
+  onChangeText,
+  onSubmit,
+}: NativeCommentInputProps) {
+  const nativeValue = useNativeState(value);
+
+  useEffect(() => {
+    nativeValue.value = value;
+  }, [nativeValue, value]);
+
+  return (
+    <Host colorScheme="dark" style={{ flex: 1, height: 48 }}>
+      <NativeTextInput
+        value={nativeValue}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#6b6f76"
+        selectionColor="#ffffff"
+        editable={!disabled}
+        maxLength={2000}
+        onSubmitEditing={onSubmit}
+        returnKeyType="send"
+        style={{
+          height: 48,
+          paddingHorizontal: 16,
+          backgroundColor: '#202124',
+          borderRadius: 24,
+        }}
+        textStyle={{ color: '#ffffff', fontSize: 16 }}
+      />
+    </Host>
+  );
+}
 
 /** "3 minutter siden" — the relative formatting dayjs did on the web. */
 function relativeTime(iso: string): string {
@@ -44,20 +92,22 @@ function relativeTime(iso: string): string {
 }
 
 export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
+  const insets = useSafeAreaInsets();
   const [comments, setComments] = useState<CommentWithAuthor[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [replyTo, setReplyTo] = useState<CommentWithAuthor | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setComments(await fetchComments(postId));
+      setComments(await fetchComments(postId, selfId));
     } catch {
       // Leave whatever is already on screen rather than blanking the thread.
     } finally {
       setLoading(false);
     }
-  }, [postId]);
+  }, [postId, selfId]);
 
   useEffect(() => {
     if (!visible) return;
@@ -72,8 +122,9 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
     if (!body || sending) return;
     setSending(true);
     try {
-      await addComment(postId, selfId, body);
+      await addComment(postId, selfId, body, replyTo?.id);
       setDraft('');
+      setReplyTo(null);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await load();
     } catch {
@@ -81,30 +132,53 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
     } finally {
       setSending(false);
     }
-  }, [draft, load, postId, selfId, sending]);
+  }, [draft, load, postId, replyTo?.id, selfId, sending]);
+
+  const likeComment = useCallback(
+    async (comment: CommentWithAuthor) => {
+      setComments((current) =>
+        current.map((item) =>
+          item.id === comment.id
+            ? {
+                ...item,
+                likedByMe: !comment.likedByMe,
+                likeCount: comment.likeCount + (comment.likedByMe ? -1 : 1),
+              }
+            : item
+        )
+      );
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        await toggleCommentLike(comment.id, selfId, comment.likedByMe);
+      } catch {
+        await load();
+      }
+    },
+    [load, selfId]
+  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View className="flex-1 justify-end bg-black/50">
         <Pressable accessibilityRole="button" className="flex-1" onPress={onClose} />
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
+          // Screen already reserves the home-indicator inset inside the sheet.
+          // Subtract it from iOS' keyboard displacement so the same inset is
+          // not counted twice as an empty band above the keyboard.
+          keyboardVerticalOffset={process.env.EXPO_OS === 'ios' ? -insets.bottom : 0}>
           <View className="max-h-[70vh] min-h-[45vh] rounded-t-3xl bg-surface">
             <Screen className="flex-1" edges={['bottom']}>
               <View className="flex-row items-center justify-between px-5 py-4">
                 <Text className="text-xl text-ink">Kommentarer</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Lukk"
+                <NativePostButton
+                  label="Lukk kommentarer"
+                  systemImage="xmark"
                   onPress={onClose}
-                  className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-                  <SymbolView
-                    name="xmark"
-                    size={15}
-                    tintColor="#ffffff"
-                    fallback={<Text className="text-base text-ink">✕</Text>}
-                  />
-                </Pressable>
+                  appearance="glass"
+                  size={36}
+                />
               </View>
 
               <FlatList
@@ -127,16 +201,18 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                       accessible
                       accessibilityLabel="Ingen kommentarer ennå">
                       <SymbolView
-                        name="airplane.departure"
-                        size={40}
+                        name="message"
+                        size={38}
                         tintColor="#3a3d42"
-                        fallback={<Text className="text-4xl opacity-30">✈️</Text>}
+                        fallback={<Text className="text-4xl text-muted opacity-30">◯</Text>}
                       />
                     </View>
                   )
                 }
                 renderItem={({ item }) => (
-                  <View className="flex-row gap-3">
+                  <View
+                    className="flex-row gap-3"
+                    style={{ marginLeft: item.parent_comment_id ? 32 : 0 }}>
                     {item.author?.avatar_url ? (
                       <Image
                         source={{ uri: item.author.avatar_url }}
@@ -153,6 +229,36 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                         </Text>
                       </View>
                       <Text className="mt-0.5 text-base text-ink">{item.body}</Text>
+                      <View className="mt-1 flex-row items-center gap-4">
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            item.likedByMe ? 'Fjern liker på kommentar' : 'Lik kommentar'
+                          }
+                          onPress={() => void likeComment(item)}
+                          className="flex-row items-center gap-1 py-1">
+                          <SymbolView
+                            name={item.likedByMe ? 'heart.fill' : 'heart'}
+                            size={13}
+                            tintColor={item.likedByMe ? '#ff3b30' : '#b0b4ba'}
+                            fallback={<Text className="text-xs text-muted">♥</Text>}
+                          />
+                          {item.likeCount > 0 ? (
+                            <Text className="text-xs text-muted">{item.likeCount}</Text>
+                          ) : null}
+                        </Pressable>
+                        {!item.parent_comment_id ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Svar ${item.author?.username}`}
+                            onPress={() => {
+                              setReplyTo(item);
+                              void Haptics.selectionAsync();
+                            }}>
+                            <Text className="py-1 text-xs text-muted">Svar</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
                     </View>
                     {item.author_id === selfId ? (
                       <Pressable
@@ -169,35 +275,39 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                 )}
               />
 
-              <View className="flex-row items-center gap-2 border-t border-glass-border px-5 py-3">
-                <TextInput
+              {replyTo ? (
+                <View className="flex-row items-center justify-between border-t border-glass-border px-5 pt-2">
+                  <Text className="text-xs text-muted">Svarer @{replyTo.author?.username}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Avbryt svar"
+                    onPress={() => setReplyTo(null)}>
+                    <Text className="px-2 py-1 text-xs text-ink">Avbryt</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View
+                className={`flex-row items-center gap-2 px-5 py-3 ${
+                  replyTo ? '' : 'border-t border-glass-border'
+                }`}>
+                <NativeCommentInput
                   value={draft}
                   onChangeText={setDraft}
-                  placeholder="Skriv en kommentar…"
-                  placeholderTextColor="#6b6f76"
-                  selectionColor="#ffffff"
-                  maxLength={2000}
-                  onSubmitEditing={send}
-                  returnKeyType="send"
-                  className="h-12 flex-1 rounded-full bg-glass px-4 text-base leading-none text-ink"
+                  placeholder={replyTo ? 'Skriv et svar…' : 'Skriv en kommentar…'}
+                  disabled={sending}
+                  onSubmit={() => void send()}
                 />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Send"
+                <NativePostButton
+                  label="Send kommentar"
+                  systemImage={sending ? 'hourglass' : 'arrow.up'}
                   disabled={!draft.trim() || sending}
-                  onPress={send}
-                  className="h-12 w-12 items-center justify-center rounded-full bg-ink active:opacity-80">
-                  {sending ? (
-                    <ActivityIndicator color="#000000" />
-                  ) : (
-                    <SymbolView
-                      name="arrow.up"
-                      size={20}
-                      tintColor="#000000"
-                      fallback={<Text className="text-lg text-canvas">↑</Text>}
-                    />
-                  )}
-                </Pressable>
+                  onPress={() => void send()}
+                  appearance="filled"
+                  tintColor="#ffffff"
+                  foregroundColor="#000000"
+                  size={48}
+                />
               </View>
             </Screen>
           </View>

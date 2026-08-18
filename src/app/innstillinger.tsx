@@ -1,19 +1,47 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { ProCard } from '@/components/pro-card';
 import { signOut } from '@/lib/auth';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
+import { isLocalArchiveEnabled, setLocalArchiveEnabled } from '@/lib/local-archive';
 import { deleteAccount } from '@/lib/moderation';
+import {
+  isLockScreenActivityEnabled,
+  setLockScreenActivityEnabled,
+} from '@/lib/lock-screen-activity';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { profile, session } = useAuth();
   const [deleting, setDeleting] = useState(false);
+  const [lockScreenEnabled, setLockScreenEnabled] = useState(isLockScreenActivityEnabled);
+  const [updatingLockScreen, setUpdatingLockScreen] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [localArchiveEnabled, setLocalArchiveEnabledState] = useState(false);
+  const [updatingLocalArchive, setUpdatingLocalArchive] = useState(false);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+
+    let active = true;
+    void isLocalArchiveEnabled(userId)
+      .then((archiveEnabled) => {
+        if (!active) return;
+        setLocalArchiveEnabledState(archiveEnabled);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [session?.user.id]);
 
   /**
    * App Store guideline 5.1.1(v) requires account deletion to be reachable
@@ -60,25 +88,8 @@ export default function SettingsScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <Screen className="flex-1" edges={['top', 'bottom']}>
-        <View className="flex-row items-center gap-3 px-5 pt-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Tilbake"
-            onPress={() => router.back()}
-            hitSlop={10}
-            className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-            <SymbolView
-              name="chevron.left"
-              size={18}
-              tintColor="#ffffff"
-              fallback={<Text className="text-lg text-ink">‹</Text>}
-            />
-          </Pressable>
-          <Text className="text-3xl text-ink">Innstillinger</Text>
-        </View>
-
-        <View className="mt-8 flex-1 px-5">
+      <Screen className="flex-1" edges={['bottom']}>
+        <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingTop: 32, paddingBottom: 36 }}>
           <Text className="mb-2 text-sm text-muted">Konto</Text>
           <View className="overflow-hidden rounded-tile bg-glass">
             <View className="px-4 py-3">
@@ -109,6 +120,85 @@ export default function SettingsScreen() {
               />
             </Pressable>
           </View>
+
+          {session ? (
+            <>
+              <Text className="mb-2 mt-8 text-sm text-muted">Pro</Text>
+              <ProCard userId={session.user.id} onProChange={setIsPro} />
+
+              {isPro && process.env.EXPO_OS !== 'web' ? (
+                <View className="mt-3 flex-row items-center rounded-tile bg-glass px-4 py-3">
+                  <View className="flex-1 pr-4">
+                    <Text className="text-base text-ink">Automatisk EkteTid-arkiv</Text>
+                    <Text className="mt-0.5 text-xs text-muted">
+                      Egne publiseringer lagres i et EkteTid-album i Bilder.
+                    </Text>
+                  </View>
+                  {updatingLocalArchive ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Switch
+                      value={localArchiveEnabled}
+                      onValueChange={async (enabled) => {
+                        setUpdatingLocalArchive(true);
+                        try {
+                          await setLocalArchiveEnabled(session.user.id, enabled);
+                          setLocalArchiveEnabledState(enabled);
+                          await Haptics.selectionAsync();
+                        } catch {
+                          Alert.alert(
+                            'Kunne ikke slå på arkivet',
+                            'Gi EkteTid tilgang til Bilder i Innstillinger og prøv igjen.'
+                          );
+                        } finally {
+                          setUpdatingLocalArchive(false);
+                        }
+                      }}
+                    />
+                  )}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {process.env.EXPO_OS === 'ios' ? (
+            <>
+              <Text className="mb-2 mt-8 text-sm text-muted">Låseskjerm</Text>
+              <View className="flex-row items-center rounded-tile bg-glass px-4 py-3">
+                <View className="flex-1 pr-4">
+                  <Text className="text-base text-ink">EkteTid Live Activity</Text>
+                  <Text className="mt-0.5 text-xs text-muted">
+                    Kameraet ligger klart på låseskjermen og Dynamic Island.
+                  </Text>
+                </View>
+                {updatingLockScreen ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Switch
+                    value={lockScreenEnabled}
+                    onValueChange={async (enabled) => {
+                      setUpdatingLockScreen(true);
+                      try {
+                        await setLockScreenActivityEnabled(
+                          enabled,
+                          profile?.display_name ?? profile?.username
+                        );
+                        setLockScreenEnabled(enabled);
+                        await Haptics.selectionAsync();
+                      } catch {
+                        Alert.alert(
+                          'Kunne ikke oppdatere låseskjermen',
+                          'Prøv igjen etter at appen er bygget på nytt.'
+                        );
+                      } finally {
+                        setUpdatingLockScreen(false);
+                      }
+                    }}
+                  />
+                )}
+              </View>
+            </>
+          ) : null}
 
           <Text className="mb-2 mt-8 text-sm text-muted">Farlig område</Text>
           <Pressable
@@ -148,7 +238,7 @@ export default function SettingsScreen() {
           <Text className="mt-3 text-center text-xs text-muted">
             Sletting fjerner alle albumene og bildene dine for godt.
           </Text>
-        </View>
+        </ScrollView>
       </Screen>
     </View>
   );

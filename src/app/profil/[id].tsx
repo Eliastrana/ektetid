@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
 import { AlbumCard } from '@/components/album-card';
+import { ErrorNotice } from '@/components/error-notice';
+import { AlbumGridSkeleton } from '@/components/skeleton';
 import { useAuth } from '@/components/auth-provider';
 import { ReportSheet } from '@/components/report-sheet';
 import { Screen } from '@/components/screen';
@@ -71,8 +73,8 @@ export default function PublicProfileScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas">
-        <ActivityIndicator color="#ffffff" />
+      <View className="flex-1 bg-canvas px-5 pt-5">
+        <AlbumGridSkeleton />
       </View>
     );
   }
@@ -83,9 +85,6 @@ export default function PublicProfileScreen() {
         <Text className="text-center text-base text-muted">
           {error ?? 'Fant ikke denne profilen.'}
         </Text>
-        <Pressable accessibilityRole="button" onPress={() => router.back()}>
-          <Text className="text-base text-ink">Tilbake</Text>
-        </Pressable>
       </View>
     );
   }
@@ -97,7 +96,7 @@ export default function PublicProfileScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <Screen className="flex-1" edges={['top']}>
+      <Screen className="flex-1" edges={['bottom']}>
         <FlatList
           data={data.visibleAlbums}
           keyExtractor={(album) => album.id!}
@@ -106,21 +105,7 @@ export default function PublicProfileScreen() {
           columnWrapperClassName="gap-3"
           ListHeaderComponent={
             <View className="pb-5">
-              <View className="flex-row items-center justify-between pt-2">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Tilbake"
-                  onPress={() => router.back()}
-                  hitSlop={10}
-                  className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-                  <SymbolView
-                    name="chevron.left"
-                    size={18}
-                    tintColor="#ffffff"
-                    fallback={<Text className="text-lg text-ink">‹</Text>}
-                  />
-                </Pressable>
-
+              <View className="flex-row items-center justify-end pt-2">
                 {relationship.kind !== 'self' ? (
                   <Pressable
                     accessibilityRole="button"
@@ -142,10 +127,18 @@ export default function PublicProfileScreen() {
                 {profile.avatar_url ? (
                   <Image
                     source={{ uri: profile.avatar_url }}
-                    style={{ width: 72, height: 72, borderRadius: 36 }}
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: 36,
+                      borderWidth: data.isPro ? 2 : 0,
+                      borderColor: data.isPro ? '#ffffff' : 'transparent',
+                    }}
                   />
                 ) : (
-                  <View className="h-[72px] w-[72px] items-center justify-center rounded-full bg-glass">
+                  <View
+                    className="h-[72px] w-[72px] items-center justify-center rounded-full bg-glass"
+                    style={data.isPro ? { borderWidth: 2, borderColor: '#ffffff' } : undefined}>
                     <Text className="text-2xl text-ink">{initials}</Text>
                   </View>
                 )}
@@ -175,7 +168,11 @@ export default function PublicProfileScreen() {
                 onRemove={() => act(() => removeFriendship(selfId, profile.id))}
               />
 
-              {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
+              {error ? (
+                <View className="mt-3">
+                  <ErrorNotice message={error} />
+                </View>
+              ) : null}
 
               {isFriend ? (
                 <Text className="mb-1 mt-7 text-sm text-muted">Albumene deres</Text>
@@ -199,6 +196,7 @@ export default function PublicProfileScreen() {
           renderItem={({ item }) => (
             <AlbumCard
               album={item}
+              pro={data.isPro}
               showOwner={false}
               onPress={(origin) =>
                 router.push({

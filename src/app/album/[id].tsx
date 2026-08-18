@@ -6,8 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  InteractionManager,
-  Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -23,8 +22,10 @@ import Animated, {
 
 import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
+import { NativePostButton } from '@/components/native-post-button';
+import { PeopleSheet } from '@/components/people-sheet';
 import { ReportSheet } from '@/components/report-sheet';
-import { PostTile } from '@/components/post-tile';
+import { imageSpecs, PostTile } from '@/components/post-tile';
 import { PostVideo } from '@/components/post-video';
 import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
@@ -32,7 +33,13 @@ import { StoryProgress } from '@/components/story-progress';
 import { fetchAlbum, markAlbumRead, type AlbumDetail } from '@/lib/album';
 import { decodeOrigin } from '@/lib/origin';
 import type { ReportTarget } from '@/lib/moderation';
-import { fetchLikes, toggleLike, type LikeState } from '@/lib/social';
+import {
+  fetchLikes,
+  hasPro,
+  recordPostView,
+  toggleLike,
+  type LikeState,
+} from '@/lib/social';
 
 /** Idle time before the chrome fades away, matching the original's 5s. */
 const CHROME_TIMEOUT_MS = 5000;
@@ -44,7 +51,7 @@ const COMMIT_RATIO = 0.28;
 const COMMIT_VELOCITY = 550;
 
 /** Downward drag that commits to dismissing. */
-const DISMISS_DISTANCE = 110;
+const DISMISS_DISTANCE = 82;
 
 /** How long the album takes to grow out of, or shrink back into, its card. */
 const GENIE_MS = 300;
@@ -68,7 +75,7 @@ const DRAG_FULL = 280;
 const DRAG_CURVE = 0.7;
 
 /** How much of the finger's travel the album follows, as a fraction. */
-const DRAG_FOLLOW = 0.3;
+const DRAG_FOLLOW = 0.4;
 
 /** The card's corner radius — `--radius-tile` in global.css. */
 const CARD_RADIUS = 12;
@@ -87,6 +94,8 @@ export default function AlbumScreen() {
     cover?: string;
     /** Its blurhash, for the case where the cover is not cached after all. */
     cb?: string;
+    /** Open a particular post when coming from the vertical stream. */
+    post?: string;
   }>();
   const { id } = params;
   const router = useRouter();
@@ -121,6 +130,12 @@ export default function AlbumScreen() {
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+  const zoomScale = useSharedValue(1);
+  const zoomStartScale = useSharedValue(1);
+  const zoomX = useSharedValue(0);
+  const zoomY = useSharedValue(0);
+  const zoomStartX = useSharedValue(0);
+  const zoomStartY = useSharedValue(0);
   const chrome = useSharedValue(1);
 
 
@@ -200,18 +215,34 @@ export default function AlbumScreen() {
   const [error, setError] = useState<string | null>(null);
   const [likes, setLikes] = useState<LikeState>({ count: 0, likedByMe: false });
   const [showComments, setShowComments] = useState(false);
+  const [peopleMode, setPeopleMode] = useState<'likes' | 'views' | null>(null);
+  const [isPro, setIsPro] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const posts = useMemo(() => album?.posts ?? [], [album]);
   const current = posts[index];
+  const currentSpecs = imageSpecs(current?.exif);
+
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    void hasPro(session.user.id)
+      .then((value) => active && setIsPro(value))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   // ---------------------------------------------------------------- loading
 
   useEffect(() => {
     if (!id) return;
     let active = true;
+    let mountTimer: ReturnType<typeof setTimeout> | null = null;
+    const openingStartedAt = Date.now();
 
     // The request starts immediately, but the state lands after the opening
     // animation. Applying it mid-flight mounts the full-screen image, the
@@ -220,22 +251,34 @@ export default function AlbumScreen() {
     void fetchAlbum(id)
       .then((detail) => {
         if (!active) return;
-        InteractionManager.runAfterInteractions(() => {
+        const openingTimeLeft = origin
+          ? Math.max(0, GENIE_MS - (Date.now() - openingStartedAt))
+          : 0;
+        mountTimer = setTimeout(() => {
           if (!active) return;
           setAlbum(detail);
           // Resume where the user left off, as the original did via localStorage.
+          const requested = params.post
+            ? detail.posts.findIndex((post) => post.id === params.post)
+            : -1;
           setIndex(
-            Math.min(Math.max(detail.lastSeenPosition, 0), Math.max(detail.posts.length - 1, 0))
+            requested >= 0
+              ? requested
+              : Math.min(
+                  Math.max(detail.lastSeenPosition, 0),
+                  Math.max(detail.posts.length - 1, 0)
+                )
           );
-        });
+        }, openingTimeLeft);
       })
       .catch(() => {
         if (active) setError('Klarte ikke å åpne albumet.');
       });
     return () => {
       active = false;
+      if (mountTimer) clearTimeout(mountTimer);
     };
-  }, [id]);
+  }, [id, origin, params.post]);
 
   useEffect(() => {
     if (!origin) return;
@@ -268,6 +311,14 @@ export default function AlbumScreen() {
     return () => {
       active = false;
     };
+  }, [index, posts, session]);
+
+  // One upsert per displayed post. The database ignores the author's own
+  // views and coalesces repeat visits, so this is safe across swipes and reopens.
+  useEffect(() => {
+    const postId = posts[index]?.id;
+    if (!postId || !session) return;
+    void recordPostView(postId).catch(() => {});
   }, [index, posts, session]);
 
   const onToggleLike = useCallback(async () => {
@@ -330,13 +381,16 @@ export default function AlbumScreen() {
 
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setExpanded(false);
+      zoomScale.value = withTiming(1, { duration: 160 });
+      zoomX.value = withTiming(0, { duration: 160 });
+      zoomY.value = withTiming(0, { duration: 160 });
       // Each post starts on its own terms: silent, and framed as shot.
       setMuted(true);
       setUncropped(false);
       setIndex(next);
       revealChrome();
     },
-    [index, posts.length, revealChrome]
+    [index, posts.length, revealChrome, zoomScale, zoomX, zoomY]
   );
 
   const settle = useCallback(
@@ -429,9 +483,23 @@ export default function AlbumScreen() {
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-12, 12])
-        .activeOffsetY([-12, 12])
+        .maxPointers(1)
+        // Four points is enough to distinguish a drag without making the
+        // album feel glued down for the first part of the movement.
+        .activeOffsetX([-4, 4])
+        .activeOffsetY([-4, 4])
+        .onStart(() => {
+          zoomStartX.value = zoomX.value;
+          zoomStartY.value = zoomY.value;
+        })
         .onUpdate((event) => {
+          if (zoomScale.value > 1.01) {
+            const maxX = (width * (zoomScale.value - 1)) / 2;
+            const maxY = (height * (zoomScale.value - 1)) / 2;
+            zoomX.value = Math.max(-maxX, Math.min(maxX, zoomStartX.value + event.translationX));
+            zoomY.value = Math.max(-maxY, Math.min(maxY, zoomStartY.value + event.translationY));
+            return;
+          }
           if (Math.abs(event.translationY) > Math.abs(event.translationX)) {
             const down = Math.max(event.translationY, 0);
             translateY.value = down;
@@ -445,9 +513,10 @@ export default function AlbumScreen() {
           }
         })
         .onEnd((event) => {
+          if (zoomScale.value > 1.01) return;
           // A quick flick counts even if it did not travel far — waiting for
           // the full distance makes a deliberate throw feel unresponsive.
-          const flung = event.velocityY > 900 && translateY.value > 30;
+          const flung = event.velocityY > 650 && translateY.value > 12;
           if (translateY.value > DISMISS_DISTANCE || flung) {
             runOnJS(dismiss)();
             return;
@@ -459,7 +528,40 @@ export default function AlbumScreen() {
           const delta = far || fast ? (event.translationX < 0 ? 1 : -1) : 0;
           runOnJS(settle)(delta);
         }),
-    [dismiss, settle, springBackY, translateX, translateY, width]
+    [
+      dismiss,
+      genie,
+      height,
+      settle,
+      springBackY,
+      translateX,
+      translateY,
+      width,
+      zoomScale,
+      zoomStartX,
+      zoomStartY,
+      zoomX,
+      zoomY,
+    ]
+  );
+
+  const pinch = useMemo(
+    () =>
+      Gesture.Pinch()
+        .onStart(() => {
+          zoomStartScale.value = zoomScale.value;
+        })
+        .onUpdate((event) => {
+          zoomScale.value = Math.max(1, Math.min(4, zoomStartScale.value * event.scale));
+        })
+        .onEnd(() => {
+          if (zoomScale.value < 1.08) {
+            zoomScale.value = withSpring(1, { damping: 20, stiffness: 220 });
+            zoomX.value = withSpring(0, { damping: 20, stiffness: 220 });
+            zoomY.value = withSpring(0, { damping: 20, stiffness: 220 });
+          }
+        }),
+    [zoomScale, zoomStartScale, zoomX, zoomY]
   );
 
   const tap = useMemo(
@@ -498,14 +600,20 @@ export default function AlbumScreen() {
   // claims the first touch. Pinch runs alongside, since it cannot be confused
   // with either.
   const gesture = useMemo(
-    () => Gesture.Exclusive(doubleTap, pan, tap),
-    [doubleTap, pan, tap]
+    // Pan gets first refusal as soon as movement begins. Giving double-tap
+    // priority made the close gesture wait for the tap recognizer to fail.
+    () => Gesture.Simultaneous(pinch, Gesture.Exclusive(pan, doubleTap, tap)),
+    [doubleTap, pan, pinch, tap]
   );
 
   const photoStyle = useAnimatedStyle(() => ({
     // Horizontal only. A downward drag now moves the whole album via genieStyle,
     // and sliding the photo inside it as well made the two come apart.
-    transform: [{ translateX: translateX.value * 0.4 }],
+    transform: [
+      { translateX: translateX.value * 0.4 + zoomX.value },
+      { translateY: zoomY.value },
+      { scale: zoomScale.value },
+    ],
   }));
 
   // ------------------------------------------------------------------ render
@@ -537,9 +645,13 @@ export default function AlbumScreen() {
     return shell(
       <View className="flex-1 items-center justify-center gap-3 px-8">
         <Text className="text-center text-base text-muted">{error}</Text>
-        <Pressable accessibilityRole="button" onPress={dismiss}>
-          <Text className="text-base text-ink">Tilbake</Text>
-        </Pressable>
+        <NativePostButton
+          label="Tilbake"
+          displayLabel="Tilbake"
+          appearance="glass"
+          size={96}
+          onPress={dismiss}
+        />
       </View>
     );
   }
@@ -578,9 +690,13 @@ export default function AlbumScreen() {
       <View className="flex-1 items-center justify-center gap-3 px-8">
         <Text className="text-base text-ink">{album.title}</Text>
         <Text className="text-sm text-muted">Dette albumet er tomt.</Text>
-        <Pressable accessibilityRole="button" onPress={dismiss}>
-          <Text className="mt-2 text-base text-ink">Tilbake</Text>
-        </Pressable>
+        <NativePostButton
+          label="Tilbake"
+          displayLabel="Tilbake"
+          appearance="glass"
+          size={96}
+          onPress={dismiss}
+        />
       </View>
     );
   }
@@ -624,90 +740,75 @@ export default function AlbumScreen() {
       <Screen className="absolute inset-0" pointerEvents="box-none">
         <Animated.View style={chromeStyle} pointerEvents="box-none" className="px-4 pt-2">
           <StoryProgress count={posts.length} index={index} />
-          <View className="mt-3 flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Lukk album"
+          <View className="mt-3 flex-row items-center gap-3">
+            <NativePostButton
+              label="Lukk album"
+              systemImage="xmark"
+              appearance="glass"
               onPress={dismiss}
-              className="h-11 w-11 items-center justify-center rounded-full bg-overlay">
-              <SymbolView
-                name="xmark"
-                size={17}
-                tintColor="#ffffff"
-                fallback={<Text className="text-lg text-ink">✕</Text>}
-              />
-            </Pressable>
-            <View className="ml-3 flex-1">
-              <Text numberOfLines={1} className="text-right text-base text-ink">
+            />
+            <View className="flex-1 items-center">
+              <Text numberOfLines={1} className="text-center text-base text-ink">
                 {album.title}
               </Text>
               {album.description ? (
-                <Text numberOfLines={1} className="text-right text-xs text-ink opacity-70">
+                <Text numberOfLines={1} className="text-center text-xs text-ink opacity-70">
                   {album.description}
                 </Text>
               ) : null}
             </View>
 
-            {/*
-              Sound and framing, in the chrome rather than over the photo.
-
-              Both were gestures or overlays sitting inside the carousel's
-              gesture detector, so using them also counted as a tap on the
-              photo and advanced to the next post. Up here they are ordinary
-              buttons in a row that takes no part in the swipe.
-            */}
-            {current?.videoUrl ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={muted ? 'Slå på lyd' : 'Slå av lyd'}
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  setMuted((value) => !value);
-                }}
-                hitSlop={8}
-                className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
-                <SymbolView
-                  name={muted ? 'speaker.slash.fill' : 'speaker.wave.2.fill'}
-                  size={16}
-                  tintColor="#ffffff"
-                  fallback={<Text className="text-lg text-ink">{muted ? '🔇' : '🔊'}</Text>}
-                />
-              </Pressable>
-            ) : null}
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={uncropped ? 'Fyll skjermen' : 'Vis hele bildet'}
+            <NativePostButton
+              label={uncropped ? 'Fyll skjermen' : 'Vis hele bildet'}
+              systemImage={
+                uncropped
+                  ? 'arrow.down.forward.and.arrow.up.backward'
+                  : 'arrow.up.backward.and.arrow.down.forward'
+              }
+              appearance="glass"
               onPress={() => setUncroppedWithFeedback(!uncropped)}
-              hitSlop={8}
-              className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
-              <SymbolView
-                name={
-                  uncropped
-                    ? 'arrow.down.forward.and.arrow.up.backward'
-                    : 'arrow.up.backward.and.arrow.down.forward'
-                }
-                size={16}
-                tintColor="#ffffff"
-                fallback={<Text className="text-lg text-ink">{uncropped ? '⤡' : '⤢'}</Text>}
-              />
-            </Pressable>
+            />
 
             {album.canEdit ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Rediger album"
+              <NativePostButton
+                label="Rediger album"
+                systemImage="slider.horizontal.3"
+                appearance="glass"
                 onPress={() => router.push(`/rediger-album/${album.id}`)}
-                hitSlop={8}
-                className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
-                <SymbolView
-                  name="slider.horizontal.3"
-                  size={17}
-                  tintColor="#ffffff"
-                  fallback={<Text className="text-lg text-ink">⋯</Text>}
-                />
-              </Pressable>
+              />
             ) : null}
+          </View>
+
+          <View className="mt-2 flex-row items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center gap-2">
+              {expanded && currentSpecs.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  className="flex-1"
+                  contentContainerStyle={{ gap: 7 }}>
+                  {currentSpecs.map((spec) => (
+                    <View key={spec} className="justify-center rounded-full bg-overlay px-3 py-2">
+                      <Text className="text-xs text-ink opacity-85">{spec}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
+
+            <View className="flex-row items-center gap-1">
+              {current?.videoUrl ? (
+                <NativePostButton
+                  label={muted ? 'Slå på lyd' : 'Slå av lyd'}
+                  systemImage={muted ? 'speaker.slash.fill' : 'speaker.wave.2.fill'}
+                  appearance="glass"
+                  onPress={() => {
+                    void Haptics.selectionAsync();
+                    setMuted((value) => !value);
+                  }}
+                />
+              ) : null}
+            </View>
           </View>
         </Animated.View>
 
@@ -742,43 +843,62 @@ export default function AlbumScreen() {
             style={chromeStyle}
             pointerEvents="box-none"
             className="flex-row justify-end gap-3">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={likes.likedByMe ? 'Fjern hjerte' : 'Gi hjerte'}
-              onPress={onToggleLike}
-              className="h-12 flex-row items-center gap-2 rounded-full px-2 active:opacity-60">
-              <SymbolView
-                name={likes.likedByMe ? 'heart.fill' : 'heart'}
-                size={24}
-                tintColor={likes.likedByMe ? '#ff3b30' : '#ffffff'}
-                fallback={<Text className="text-xl">{likes.likedByMe ? '❤️' : '🤍'}</Text>}
-              />
+            <View className="flex-row items-center">
               {likes.count > 0 ? (
-                <Text className="text-base text-ink">{likes.count}</Text>
+                <NativePostButton
+                  label={`Se hvem som ga ${likes.count} hjerter`}
+                  displayLabel={String(likes.count)}
+                  size={48}
+                  contentAlignment="trailing"
+                  onPress={() => setPeopleMode('likes')}
+                />
               ) : null}
-            </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Kommentarer"
+              {/* The heart is always the group's rightmost 48pt control. The
+                  optional count therefore grows leftward without moving it. */}
+              <NativePostButton
+                label={likes.likedByMe ? 'Fjern hjerte' : 'Gi hjerte'}
+                systemImage={likes.likedByMe ? 'heart.fill' : 'heart'}
+                tintColor={likes.likedByMe ? '#ff3b30' : '#ffffff'}
+                size={48}
+                onPress={onToggleLike}
+              />
+            </View>
+
+            {current && session && current.author_id === session.user.id && isPro ? (
+              <NativePostButton
+                label="Se hvem som har sett innlegget"
+                systemImage="eye.fill"
+                size={48}
+                onPress={() => setPeopleMode('views')}
+              />
+            ) : null}
+
+            <NativePostButton
+              label="Kommentarer"
+              systemImage="bubble.left.fill"
+              size={48}
               onPress={() => {
                 void Haptics.selectionAsync();
                 setShowComments(true);
               }}
-              className="h-12 w-12 items-center justify-center rounded-full active:opacity-60">
-              <SymbolView
-                name="bubble.left.fill"
-                size={22}
-                tintColor="#ffffff"
-                fallback={<Text className="text-xl">💬</Text>}
+            />
+
+            {current && session && current.author_id === session.user.id ? (
+              <NativePostButton
+                label="Rediger innlegg"
+                systemImage="pencil"
+                size={48}
+                onPress={() => router.push(`/rediger-innlegg/${current.id}` as never)}
               />
-            </Pressable>
+            ) : null}
 
             {/* Reporting your own post is meaningless, so it is hidden there. */}
             {current && session && current.author_id !== session.user.id ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Rapporter innlegg"
+              <NativePostButton
+                label="Rapporter innlegg"
+                systemImage="ellipsis"
+                size={48}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   setReportTarget({
@@ -786,19 +906,13 @@ export default function AlbumScreen() {
                     postId: current.id,
                   });
                 }}
-                className="h-12 w-12 items-center justify-center rounded-full active:opacity-60">
-                <SymbolView
-                  name="ellipsis"
-                  size={22}
-                  tintColor="#ffffff"
-                  fallback={<Text className="text-xl text-ink">⋯</Text>}
-                />
-              </Pressable>
+              />
             ) : null}
           </Animated.View>
 
           {current ? (
             <PostTile
+              key={current.id}
               post={current}
               showAuthor={album.isShared}
               expanded={expanded}
@@ -832,6 +946,15 @@ export default function AlbumScreen() {
           selfId={session.user.id}
           visible={showComments}
           onClose={() => setShowComments(false)}
+        />
+      ) : null}
+
+      {current && peopleMode ? (
+        <PeopleSheet
+          postId={current.id}
+          mode={peopleMode}
+          visible
+          onClose={() => setPeopleMode(null)}
         />
       ) : null}
     </>

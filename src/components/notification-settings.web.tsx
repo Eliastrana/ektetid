@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Switch, Text, View } from 'react-native';
 
+import { ErrorNotice } from '@/components/error-notice';
+
 import {
   DEFAULT_PREFS,
   PREF_LABELS,
@@ -142,11 +144,8 @@ export function NotificationSettings({ userId }: { userId: string }) {
           : null}
 
         {denied ? (
-          <View className="border-t border-glass-border px-4 py-3">
-            <Text className="text-sm text-alert">
-              Varsler er blokkert for dette nettstedet. Du må slå dem på igjen i
-              nettleserinnstillingene.
-            </Text>
+          <View className="border-t border-glass-border p-3">
+            <ErrorNotice message="Varsler er blokkert. Slå dem på igjen i nettleserinnstillingene." />
           </View>
         ) : null}
       </View>

@@ -1,25 +1,28 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { ErrorNotice } from '@/components/error-notice';
 import type { Profile } from '@/lib/database.types';
 import {
   acceptFriendRequest,
   listFriendships,
+  listFriendSuggestions,
   removeFriendship,
   searchProfiles,
   sendFriendRequest,
   type FriendRequest,
+  type FriendSuggestion,
 } from '@/lib/friends';
 
 type Row =
   | { kind: 'header'; title: string }
   | { kind: 'friendship'; item: FriendRequest }
+  | { kind: 'suggestion'; item: FriendSuggestion }
   | { kind: 'result'; item: Profile };
 
 function Avatar({ url }: { url: string | null }) {
@@ -39,6 +42,7 @@ export default function FriendsScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Profile[]>([]);
   const [friendships, setFriendships] = useState<FriendRequest[]>([]);
+  const [suggestions, setSuggestions] = useState<FriendSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +50,12 @@ export default function FriendsScreen() {
   const load = useCallback(async () => {
     if (!selfId) return;
     try {
-      setFriendships(await listFriendships(selfId));
+      const [nextFriendships, nextSuggestions] = await Promise.all([
+        listFriendships(selfId),
+        listFriendSuggestions(),
+      ]);
+      setFriendships(nextFriendships);
+      setSuggestions(nextSuggestions);
       setError(null);
     } catch {
       setError('Klarte ikke å hente vennene dine.');
@@ -113,6 +122,10 @@ export default function FriendsScreen() {
     rows.push({ kind: 'header', title: `Venner (${accepted.length})` });
     accepted.forEach((item) => rows.push({ kind: 'friendship', item }));
   }
+  if (!query.trim() && suggestions.length) {
+    rows.push({ kind: 'header', title: 'Venner av venner' });
+    suggestions.forEach((item) => rows.push({ kind: 'suggestion', item }));
+  }
   if (outgoing.length) {
     rows.push({ kind: 'header', title: 'Forespørsler sendt' });
     outgoing.forEach((item) => rows.push({ kind: 'friendship', item }));
@@ -120,23 +133,7 @@ export default function FriendsScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <Screen className="flex-1" edges={['top', 'bottom']}>
-        <View className="flex-row items-center gap-3 px-5 pt-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Tilbake"
-            onPress={() => router.back()}
-            className="h-10 w-10 items-center justify-center rounded-full bg-glass">
-            <SymbolView
-              name="chevron.left"
-              size={18}
-              tintColor="#ffffff"
-              fallback={<Text className="text-lg text-ink">‹</Text>}
-            />
-          </Pressable>
-          <Text className="text-3xl text-ink">Venner</Text>
-        </View>
-
+      <Screen className="flex-1" edges={['bottom']}>
         <View className="px-5 pt-4">
           <TextInput
             value={query}
@@ -148,14 +145,21 @@ export default function FriendsScreen() {
             selectionColor="#ffffff"
             className="h-12 rounded-tile bg-glass px-4 text-base leading-none text-ink"
           />
-          {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
+          {error ? (
+            <View className="mt-3">
+              <ErrorNotice message={error} />
+            </View>
+          ) : null}
         </View>
 
         <FlatList
           data={rows}
           keyExtractor={(row, i) => {
             if (row.kind === 'header') return `h-${row.title}-${i}`;
-            const id = row.kind === 'result' ? row.item.id : row.item.profile.id;
+            const id =
+              row.kind === 'result' || row.kind === 'suggestion'
+                ? row.item.id
+                : row.item.profile.id;
             return `${row.kind}-${id}`;
           }}
           contentContainerClassName="px-5 pb-8 pt-2"
@@ -180,7 +184,10 @@ export default function FriendsScreen() {
               );
             }
 
-            const profile = row.kind === 'result' ? row.item : row.item.profile;
+            const profile =
+              row.kind === 'result' || row.kind === 'suggestion'
+                ? row.item
+                : row.item.profile;
             const busy = busyId === profile.id;
 
             return (
@@ -196,12 +203,18 @@ export default function FriendsScreen() {
                       {profile.display_name ?? profile.username}
                     </Text>
                     <Text className="text-xs text-muted">@{profile.username}</Text>
+                    {row.kind === 'suggestion' ? (
+                      <Text className="mt-0.5 text-xs text-muted">
+                        {row.item.mutualCount}{' '}
+                        {row.item.mutualCount === 1 ? 'felles venn' : 'felles venner'}
+                      </Text>
+                    ) : null}
                   </View>
                 </Pressable>
 
                 {busy ? (
                   <ActivityIndicator color="#ffffff" />
-                ) : row.kind === 'result' ? (
+                ) : row.kind === 'result' || row.kind === 'suggestion' ? (
                   knownIds.has(profile.id) ? (
                     <Text className="text-xs text-muted">Sendt</Text>
                   ) : (

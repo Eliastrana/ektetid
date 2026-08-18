@@ -2,7 +2,7 @@
   "expo": {
     "name": "EkteTid",
     "slug": "ektetid",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ektetid",
@@ -128,7 +128,7 @@
         "expo-media-library",
         {
           "photosPermission": "EkteTid trenger tilgang til bildene dine så du kan legge ut bilder du allerede har tatt.",
-          "savePhotosPermission": "EkteTid lagrer bildene du tar i kamerarullen din.",
+          "savePhotosPermission": "EkteTid lagrer publiseringene du arkiverer i et eget EkteTid-album i Bilder.",
           "isAccessMediaLocationEnabled": true
         }
       ],
@@ -159,8 +159,15 @@
       ],
       "expo-sharing",
       "expo-maps",
-      "@bacons/apple-targets",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.eliastrana.ektetid.widgets",
+          "groupIdentifier": "group.com.eliastrana.ektetid"
+        }
+      ],
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,6 +1,5 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { ErrorNotice } from '@/components/error-notice';
 import { MIN_PASSWORD_LENGTH, setPassword } from '@/lib/auth';
 import { errorMessage } from '@/lib/errors';
 
@@ -35,6 +35,12 @@ export default function PasswordScreen() {
   const longEnough = password.length >= MIN_PASSWORD_LENGTH;
   const matches = password === repeat;
   const valid = longEnough && matches;
+  const validationError =
+    password.length > 0 && !longEnough
+      ? `Passordet må være minst ${MIN_PASSWORD_LENGTH} tegn.`
+      : repeat.length > 0 && !matches
+        ? 'Passordene er ikke like.'
+        : error;
 
   async function save() {
     if (!valid || saving) return;
@@ -60,24 +66,7 @@ export default function PasswordScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Screen className="flex-1" edges={['top', 'bottom']}>
-          <View className="flex-row items-center gap-3 px-5 pt-2">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Tilbake"
-              onPress={() => router.back()}
-              hitSlop={10}
-              className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-              <SymbolView
-                name="chevron.left"
-                size={18}
-                tintColor="#ffffff"
-                fallback={<Text className="text-lg text-ink">‹</Text>}
-              />
-            </Pressable>
-            <Text className="text-3xl text-ink">Passord</Text>
-          </View>
-
+        <Screen className="flex-1" edges={['bottom']}>
           <View className="mt-8 flex-1 px-5">
             <Text className="mb-4 text-sm text-muted">
               Med et passord slipper du å vente på koden på e-post. Du kan
@@ -115,21 +104,15 @@ export default function PasswordScreen() {
               someone their password is too short before they have finished
               typing it is noise.
             */}
-            <Text className="mt-3 text-sm text-muted">
-              {password.length > 0 && !longEnough ? (
-                <Text className="text-alert">
-                  Passordet må være minst {MIN_PASSWORD_LENGTH} tegn.
-                </Text>
-              ) : repeat.length > 0 && !matches ? (
-                <Text className="text-alert">Passordene er ikke like.</Text>
-              ) : error ? (
-                <Text className="text-alert">{error}</Text>
-              ) : saved ? (
-                'Passordet er lagret.'
-              ) : (
-                `Minst ${MIN_PASSWORD_LENGTH} tegn.`
-              )}
-            </Text>
+            {validationError ? (
+              <View className="mt-3">
+                <ErrorNotice message={validationError} />
+              </View>
+            ) : (
+              <Text className="mt-3 text-sm text-muted">
+                {saved ? 'Passordet er lagret.' : `Minst ${MIN_PASSWORD_LENGTH} tegn.`}
+              </Text>
+            )}
 
             <Pressable
               accessibilityRole="button"

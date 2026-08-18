@@ -1,14 +1,17 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import { AlbumCard } from '@/components/album-card';
 import { AvatarPicker } from '@/components/avatar-picker';
+import { NativePostButton } from '@/components/native-post-button';
 import { NotificationSettings } from '@/components/notification-settings';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
+import { AlbumGridSkeleton } from '@/components/skeleton';
 import { encodeOrigin } from '@/lib/origin';
+import { hasPro } from '@/lib/social';
 import {
   fetchOwnAlbums,
   fetchProfileStats,
@@ -34,16 +37,19 @@ export default function ProfileScreen() {
   const [albums, setAlbums] = useState<OwnAlbum[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isPro, setIsPro] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
     try {
-      const [nextStats, nextAlbums] = await Promise.all([
+      const [nextStats, nextAlbums, nextPro] = await Promise.all([
         fetchProfileStats(userId),
         fetchOwnAlbums(userId),
+        hasPro(userId),
       ]);
       setStats(nextStats);
       setAlbums(nextAlbums);
+      setIsPro(nextPro);
     } catch {
       // Keep whatever is on screen; the pull-to-refresh is the retry.
     } finally {
@@ -85,19 +91,13 @@ export default function ProfileScreen() {
           ListHeaderComponent={
             <View className="pb-5">
               <View className="flex-row items-center justify-end pt-2">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Innstillinger"
+                <NativePostButton
+                  label="Innstillinger"
+                  systemImage="gearshape.fill"
+                  appearance="glass"
+                  size={44}
                   onPress={() => router.push('/innstillinger')}
-                  hitSlop={10}
-                  className="h-11 w-11 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-                  <SymbolView
-                    name="gearshape.fill"
-                    size={20}
-                    tintColor="#ffffff"
-                    fallback={<Text className="text-lg text-ink">⚙</Text>}
-                  />
-                </Pressable>
+                />
               </View>
 
               <View className="mt-2 flex-row items-center gap-4">
@@ -106,6 +106,7 @@ export default function ProfileScreen() {
                     userId={userId}
                     avatarUrl={profile?.avatar_url ?? null}
                     initials={initials}
+                    pro={isPro}
                     onChanged={async () => {
                       await refreshProfile();
                       await load();
@@ -125,6 +126,32 @@ export default function ProfileScreen() {
                 <Stat value={stats?.albums ?? 0} label="album" />
                 <Stat value={stats?.heartsReceived ?? 0} label="hjerter" />
               </View>
+
+              {isPro ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/minneblikk')}
+                  className="mt-3 h-16 flex-row items-center gap-3 rounded-tile bg-glass px-4 active:bg-glass-strong">
+                  <View className="h-9 w-9 items-center justify-center rounded-full bg-glass-strong">
+                    <SymbolView
+                      name="clock.arrow.circlepath"
+                      size={16}
+                      tintColor="#ffffff"
+                      fallback={<Text className="text-base text-ink">↻</Text>}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-base text-ink">Minneblikk</Text>
+                    <Text className="text-xs text-muted">Denne dagen og dine oppsummeringer</Text>
+                  </View>
+                  <SymbolView
+                    name="chevron.right"
+                    size={14}
+                    tintColor="#6b6f76"
+                    fallback={<Text className="text-base text-muted">›</Text>}
+                  />
+                </Pressable>
+              ) : null}
 
               <Pressable
                 accessibilityRole="button"
@@ -151,9 +178,7 @@ export default function ProfileScreen() {
           }
           ListEmptyComponent={
             loading ? (
-              <View className="items-center py-10">
-                <ActivityIndicator color="#ffffff" />
-              </View>
+              <AlbumGridSkeleton />
             ) : (
               <View className="items-center gap-2 py-10">
                 <Text className="text-base text-ink">Ingen album ennå</Text>
@@ -166,6 +191,7 @@ export default function ProfileScreen() {
           renderItem={({ item }) => (
             <AlbumCard
               album={item}
+              pro={isPro}
               isOwn
               showOwner={false}
               onPress={(origin) =>

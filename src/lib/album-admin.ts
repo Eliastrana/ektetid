@@ -1,4 +1,5 @@
 import type { Profile } from '@/lib/database.types';
+import type { AlbumCoverLayout } from '@/lib/album-customization';
 import { signedUrls } from '@/lib/images';
 import { supabase } from '@/lib/supabase';
 
@@ -11,7 +12,9 @@ export type AdminPost = {
   takenAt: string;
   imagePath: string;
   selfiePath: string | null;
+  videoPath: string | null;
   imageUrl: string | null;
+  videoUrl: string | null;
   blurhash: string | null;
   author: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
 };
@@ -20,6 +23,9 @@ export type AlbumAdmin = {
   id: string;
   title: string;
   description: string | null;
+  coverPostId: string | null;
+  accentColor: string;
+  coverLayout: AlbumCoverLayout;
   ownerId: string;
   isOwner: boolean;
   members: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>[];
@@ -29,13 +35,17 @@ export type AlbumAdmin = {
 /** Everything the management screen needs, in one round trip per concern. */
 export async function fetchAlbumAdmin(albumId: string, selfId: string): Promise<AlbumAdmin> {
   const [album, posts, members] = await Promise.all([
-    supabase.from('albums').select('id, title, description, owner_id').eq('id', albumId).single(),
+    supabase
+      .from('albums')
+      .select('id, title, description, owner_id, cover_post_id, accent_color, cover_layout')
+      .eq('id', albumId)
+      .single(),
     supabase
       .from('posts')
       // Written as one literal: PostgREST's types are inferred from the
       // string, and a concatenation is opaque to that inference.
       .select(
-        'id, position, title, taken_at, image_path, selfie_path, blurhash, author:profiles!posts_author_id_fkey(id, username, display_name, avatar_url)'
+        'id, position, title, taken_at, image_path, selfie_path, video_path, blurhash, author:profiles!posts_author_id_fkey(id, username, display_name, avatar_url)'
       )
       .eq('album_id', albumId)
       .order('position'),
@@ -48,13 +58,18 @@ export async function fetchAlbumAdmin(albumId: string, selfId: string): Promise<
   if (album.error) throw album.error;
   if (posts.error) throw posts.error;
 
-  const paths = posts.data.map((p) => p.image_path);
+  const paths = posts.data.flatMap((post) =>
+    [post.image_path, post.video_path].filter((path): path is string => !!path)
+  );
   const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
 
   return {
     id: album.data.id,
     title: album.data.title,
     description: album.data.description,
+    coverPostId: album.data.cover_post_id,
+    accentColor: album.data.accent_color,
+    coverLayout: album.data.cover_layout as AlbumCoverLayout,
     ownerId: album.data.owner_id,
     isOwner: album.data.owner_id === selfId,
     members: (members.data ?? []).map((row) => row.member as unknown as AlbumAdmin['members'][0]),
@@ -65,7 +80,9 @@ export async function fetchAlbumAdmin(albumId: string, selfId: string): Promise<
       takenAt: post.taken_at,
       imagePath: post.image_path,
       selfiePath: post.selfie_path,
+      videoPath: post.video_path,
       imageUrl: urls.get(post.image_path) ?? null,
+      videoUrl: post.video_path ? (urls.get(post.video_path) ?? null) : null,
       blurhash: post.blurhash,
       author: post.author as unknown as AdminPost['author'],
     })),
@@ -77,6 +94,23 @@ export async function updateAlbum(
   fields: { title?: string; description?: string | null }
 ): Promise<void> {
   const { error } = await supabase.from('albums').update(fields).eq('id', albumId);
+  if (error) throw error;
+}
+
+export async function updateAlbumCustomization(
+  albumId: string,
+  fields: {
+    coverPostId: string | null;
+    accentColor: string;
+    coverLayout: AlbumCoverLayout;
+  }
+): Promise<void> {
+  const { error } = await supabase.rpc('update_album_customization', {
+    p_album_id: albumId,
+    p_cover_post_id: fields.coverPostId,
+    p_accent_color: fields.accentColor,
+    p_cover_layout: fields.coverLayout,
+  });
   if (error) throw error;
 }
 

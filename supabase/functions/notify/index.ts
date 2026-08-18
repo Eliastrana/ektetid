@@ -372,7 +372,10 @@ Deno.serve(async (request) => {
 
     const albumTitle = (post.albums as unknown as { title: string } | null)?.title ?? 'et album';
     const { ownerId, memberIds, friendIds } = await albumAudience(admin, post.album_id, user.id);
-    const url = `ektetid:///album/${post.album_id}`;
+    // Include the post as a search parameter. The album route already reads
+    // `post` and selects that item after loading, so a notification opens the
+    // new photo itself instead of merely resuming somewhere in its album.
+    const url = `ektetid:///album/${post.album_id}?post=${encodeURIComponent(id)}`;
 
     // Collaborators, including the owner when someone else posted into their
     // album. A different switch and a different sentence: this is an album

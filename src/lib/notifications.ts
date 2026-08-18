@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -64,6 +65,40 @@ const DAILY_REMINDER_ID = 'ektetid-daglig-paaminnelse';
 /** When the prompt lands. Early evening: the day has happened, but is not over. */
 const REMINDER_HOUR = 19;
 
+/** Keep token acquisition from holding a user action open indefinitely offline. */
+const PUSH_TOKEN_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Tidsavbrudd ved registrering av varsler.')), milliseconds);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/** Request only the operating-system permission, without making a network call. */
+export async function ensureNotificationPermission(): Promise<boolean> {
+  const existing = await Notifications.getPermissionsAsync();
+  let granted = existing.granted;
+
+  if (!granted && existing.canAskAgain) {
+    const asked = await Notifications.requestPermissionsAsync();
+    granted = asked.granted;
+  }
+  return granted;
+}
+
+function easProjectId(): string {
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+  if (typeof projectId !== 'string' || !projectId) {
+    throw new Error('EAS projectId mangler i appkonfigurasjonen.');
+  }
+  return projectId;
+}
+
 /**
  * Show notifications while the app is open too.
  *
@@ -92,17 +127,12 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPush(userId: string): Promise<boolean> {
   if (!Device.isDevice) return false;
+  if (!(await ensureNotificationPermission())) return false;
 
-  const existing = await Notifications.getPermissionsAsync();
-  let granted = existing.granted;
-
-  if (!granted && existing.canAskAgain) {
-    const asked = await Notifications.requestPermissionsAsync();
-    granted = asked.granted;
-  }
-  if (!granted) return false;
-
-  const token = await Notifications.getExpoPushTokenAsync();
+  const token = await withTimeout(
+    Notifications.getExpoPushTokenAsync({ projectId: easProjectId() }),
+    PUSH_TOKEN_TIMEOUT_MS
+  );
 
   // Upsert on the token: reinstalling gives a new token, and the same device
   // may be signed in as someone else, so the row has to follow the token.
@@ -121,7 +151,10 @@ export async function registerForPush(userId: string): Promise<boolean> {
 export async function unregisterPush(): Promise<void> {
   if (!Device.isDevice) return;
   try {
-    const token = await Notifications.getExpoPushTokenAsync();
+    const token = await withTimeout(
+      Notifications.getExpoPushTokenAsync({ projectId: easProjectId() }),
+      PUSH_TOKEN_TIMEOUT_MS
+    );
     await supabase.from('push_tokens').delete().eq('token', token.data);
   } catch {
     // A device that never had a token has nothing to remove, and failing to

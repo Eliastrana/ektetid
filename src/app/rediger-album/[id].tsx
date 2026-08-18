@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
@@ -11,6 +11,9 @@ import ReorderableList, {
 } from 'react-native-reorderable-list';
 
 import { useAuth } from '@/components/auth-provider';
+import { ErrorNotice } from '@/components/error-notice';
+import { NativePostButton } from '@/components/native-post-button';
+import { AlbumGridSkeleton } from '@/components/skeleton';
 import { Screen } from '@/components/screen';
 import {
   addMember,
@@ -21,11 +24,19 @@ import {
   removeMember,
   reorderAlbum,
   updateAlbum,
+  updateAlbumCustomization,
   type AdminPost,
   type AlbumAdmin,
 } from '@/lib/album-admin';
+import {
+  ALBUM_ACCENTS,
+  ALBUM_LAYOUTS,
+  type AlbumCoverLayout,
+} from '@/lib/album-customization';
 import { errorMessage } from '@/lib/errors';
 import type { Profile } from '@/lib/database.types';
+import { saveMediaLocally } from '@/lib/save-media';
+import { hasPro } from '@/lib/social';
 
 type Friend = Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
 
@@ -39,20 +50,30 @@ export default function EditAlbumScreen() {
   const [posts, setPosts] = useState<AdminPost[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [coverPostId, setCoverPostId] = useState<string | null>(null);
+  const [accentColor, setAccentColor] = useState('#9B5CFF');
+  const [coverLayout, setCoverLayout] = useState<AlbumCoverLayout>('full');
+  const [isPro, setIsPro] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [downloadingPostId, setDownloadingPostId] = useState<string | null>(null);
+  const [downloadedPostId, setDownloadedPostId] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id || !selfId) return;
     try {
-      const data = await fetchAlbumAdmin(id, selfId);
+      const [data, pro] = await Promise.all([fetchAlbumAdmin(id, selfId), hasPro(selfId)]);
       setAlbum(data);
       setPosts(data.posts);
       setTitle(data.title);
       setDescription(data.description ?? '');
+      setCoverPostId(data.coverPostId);
+      setAccentColor(data.accentColor);
+      setCoverLayout(data.coverLayout);
+      setIsPro(pro);
       if (data.isOwner) setFriends(await listInvitableFriends(id, selfId));
     } catch (caught) {
       setError(errorMessage(caught, 'Klarte ikke å hente albumet.'));
@@ -100,6 +121,36 @@ export default function EditAlbumScreen() {
     ]);
   }
 
+  const downloadPost = useCallback(
+    async (post: AdminPost) => {
+      // Album collaborators can open this screen, but local saving belongs to
+      // the person who made the post. Keep the ownership check in the handler
+      // as well as in the UI so it cannot be bypassed by a stale row render.
+      if (post.author?.id !== selfId || downloadingPostId) return;
+
+      const url = post.videoUrl ?? post.imageUrl;
+      if (!url) {
+        setError('Filen er ikke tilgjengelig akkurat nå.');
+        return;
+      }
+
+      setError(null);
+      setDownloadedPostId(null);
+      setDownloadingPostId(post.id);
+      try {
+        await saveMediaLocally(url, post.id, post.videoUrl ? 'video' : 'photo');
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setDownloadedPostId(post.id);
+      } catch (caught) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setError(errorMessage(caught, 'Klarte ikke å lagre filen.'));
+      } finally {
+        setDownloadingPostId(null);
+      }
+    },
+    [downloadingPostId, selfId]
+  );
+
   function confirmInvite(friend: Friend) {
     if (!id || !selfId) return;
     Alert.alert(
@@ -137,8 +188,8 @@ export default function EditAlbumScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas">
-        <ActivityIndicator color="#ffffff" />
+      <View className="flex-1 bg-canvas px-5 pt-5">
+        <AlbumGridSkeleton />
       </View>
     );
   }
@@ -149,9 +200,6 @@ export default function EditAlbumScreen() {
         <Text className="text-center text-base text-muted">
           {error ?? 'Fant ikke albumet.'}
         </Text>
-        <Pressable accessibilityRole="button" onPress={() => router.back()}>
-          <Text className="text-base text-ink">Tilbake</Text>
-        </Pressable>
       </View>
     );
   }
@@ -169,7 +217,13 @@ export default function EditAlbumScreen() {
   const fieldsChanged =
     nextTitle !== album.title || nextDescription !== (album.description ?? '');
   const orderChanged = posts.some((post, i) => post.id !== album.posts[i]?.id);
-  const dirty = fieldsChanged || orderChanged;
+  const canCustomize = album.isOwner && isPro;
+  const customizationChanged =
+    canCustomize &&
+    (coverPostId !== album.coverPostId ||
+      accentColor !== album.accentColor ||
+      coverLayout !== album.coverLayout);
+  const dirty = fieldsChanged || orderChanged || customizationChanged;
 
   function save() {
     void run(async () => {
@@ -186,6 +240,13 @@ export default function EditAlbumScreen() {
       if (orderChanged) {
         await reorderAlbum(album!.id, posts.map((post) => post.id));
       }
+      if (customizationChanged) {
+        await updateAlbumCustomization(album!.id, {
+          coverPostId,
+          accentColor,
+          coverLayout,
+        });
+      }
     }).then(() => {
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2000);
@@ -194,7 +255,27 @@ export default function EditAlbumScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <Screen className="flex-1" edges={['top', 'bottom']}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Lagre endringer"
+              disabled={!dirty || busy}
+              onPress={save}
+              hitSlop={8}>
+              {busy ? (
+                <ActivityIndicator color="#ffffff" size="small" />
+              ) : (
+                <Text className={dirty ? 'text-base text-ink' : 'text-base text-muted'}>
+                  {justSaved && !dirty ? 'Lagret' : 'Lagre'}
+                </Text>
+              )}
+            </Pressable>
+          ),
+        }}
+      />
+      <Screen className="flex-1" edges={['bottom']}>
         <ReorderableList
           data={posts}
           onReorder={onReorder}
@@ -216,42 +297,7 @@ export default function EditAlbumScreen() {
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View>
-              <View className="flex-row items-center justify-between pt-2">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Tilbake"
-                  onPress={() => router.back()}
-                  hitSlop={10}
-                  className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-                  <SymbolView
-                    name="chevron.left"
-                    size={18}
-                    tintColor="#ffffff"
-                    fallback={<Text className="text-lg text-ink">‹</Text>}
-                  />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Lagre endringer"
-                  disabled={!dirty || busy}
-                  onPress={save}
-                  // active: stays in the class list unconditionally — adding or
-                  // removing a pressable state after mount makes react-native-css
-                  // reset the component and remount its children.
-                  className={`h-10 min-w-24 items-center justify-center rounded-full px-5 active:opacity-80 ${
-                    dirty && !busy ? 'bg-ink' : 'bg-surface-raised'
-                  }`}>
-                  {busy ? (
-                    <ActivityIndicator color="#0d0d0f" />
-                  ) : (
-                    <Text className={`text-base ${dirty ? 'text-canvas' : 'text-muted'}`}>
-                      {justSaved && !dirty ? 'Lagret' : 'Lagre'}
-                    </Text>
-                  )}
-                </Pressable>
-              </View>
-
-              <Text className="mb-2 mt-6 text-sm text-muted">Tittel</Text>
+              <Text className="mb-2 mt-4 text-sm text-muted">Tittel</Text>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
@@ -272,6 +318,107 @@ export default function EditAlbumScreen() {
                 selectionColor="#ffffff"
                 className="min-h-20 rounded-tile bg-glass px-4 py-3 text-base text-ink"
               />
+
+              {album.isOwner ? (
+                <>
+                  <View className="mb-2 mt-7 flex-row items-center justify-between">
+                    <Text className="text-sm text-muted">Albumutseende</Text>
+                    <Text className="rounded-full bg-ink px-2 py-1 text-[11px] font-semibold text-black">
+                      PRO
+                    </Text>
+                  </View>
+
+                  {canCustomize ? (
+                    <View className="rounded-tile bg-glass p-4">
+                      <Text className="text-sm text-ink">Cover</Text>
+                      <Text className="mt-1 text-xs text-muted">
+                        Trykk på et bilde nedenfor, eller bruk det nyeste automatisk.
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: coverPostId === null }}
+                        onPress={() => {
+                          void Haptics.selectionAsync();
+                          setCoverPostId(null);
+                        }}
+                        className={`mt-3 self-start rounded-full px-3 py-2 ${
+                          coverPostId === null ? 'bg-ink' : 'bg-surface-raised'
+                        }`}>
+                        <Text
+                          className={`text-xs ${
+                            coverPostId === null ? 'text-canvas' : 'text-ink'
+                          }`}>
+                          Nyeste automatisk
+                        </Text>
+                      </Pressable>
+
+                      <Text className="mb-2 mt-5 text-sm text-ink">Farge</Text>
+                      <View className="flex-row flex-wrap gap-3">
+                        {ALBUM_ACCENTS.map((accent) => {
+                          const selected = accentColor === accent.value;
+                          return (
+                            <Pressable
+                              key={accent.value}
+                              accessibilityRole="button"
+                              accessibilityLabel={accent.label}
+                              accessibilityState={{ selected }}
+                              onPress={() => {
+                                void Haptics.selectionAsync();
+                                setAccentColor(accent.value);
+                              }}
+                              className="h-10 w-10 items-center justify-center rounded-full"
+                              style={{
+                                borderWidth: selected ? 2 : 0,
+                                borderColor: '#ffffff',
+                              }}>
+                              <View
+                                className="h-8 w-8 rounded-full"
+                                style={{ backgroundColor: accent.value }}
+                              />
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      <Text className="mb-2 mt-5 text-sm text-ink">Layout</Text>
+                      <View className="flex-row gap-2">
+                        {ALBUM_LAYOUTS.map((layout) => {
+                          const selected = coverLayout === layout.value;
+                          return (
+                            <Pressable
+                              key={layout.value}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              onPress={() => {
+                                void Haptics.selectionAsync();
+                                setCoverLayout(layout.value);
+                              }}
+                              className={`h-11 flex-1 items-center justify-center rounded-xl ${
+                                selected ? 'bg-ink' : 'bg-surface-raised'
+                              }`}>
+                              <Text
+                                numberOfLines={1}
+                                className={`text-xs ${selected ? 'text-canvas' : 'text-ink'}`}>
+                                {layout.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => router.push('/innstillinger')}
+                      className="rounded-tile bg-glass p-4 active:bg-glass-strong">
+                      <Text className="text-base text-ink">Tilpass med EkteTid Pro</Text>
+                      <Text className="mt-1 text-sm text-muted">
+                        Velg cover, farge og layout for albumkortet.
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : null}
 
               <Text className="mb-2 mt-7 text-sm text-muted">
                 {shared ? `Deles med ${album.members.length}` : 'Deles med ingen'}
@@ -343,7 +490,11 @@ export default function EditAlbumScreen() {
                 ) : null}
               </View>
 
-              {error ? <Text className="mb-3 text-sm text-alert">{error}</Text> : null}
+              {error ? (
+                <View className="mb-3">
+                  <ErrorNotice message={error} />
+                </View>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
@@ -354,6 +505,21 @@ export default function EditAlbumScreen() {
               post={item}
               shared={shared}
               busy={busy}
+              canDownload={item.author?.id === selfId}
+              downloadState={
+                downloadingPostId === item.id
+                  ? 'saving'
+                  : downloadedPostId === item.id
+                    ? 'saved'
+                    : 'idle'
+              }
+              onDownload={() => void downloadPost(item)}
+              canCustomize={canCustomize}
+              isCover={coverPostId === item.id}
+              onSelectCover={() => {
+                void Haptics.selectionAsync();
+                setCoverPostId(item.id);
+              }}
               onDelete={() => confirmDeletePost(item)}
             />
           )}
@@ -385,11 +551,23 @@ function PostRow({
   post,
   shared,
   busy,
+  canDownload,
+  downloadState,
+  onDownload,
+  canCustomize,
+  isCover,
+  onSelectCover,
   onDelete,
 }: {
   post: AdminPost;
   shared: boolean;
   busy: boolean;
+  canDownload: boolean;
+  downloadState: 'idle' | 'saving' | 'saved';
+  onDownload: () => void;
+  canCustomize: boolean;
+  isCover: boolean;
+  onSelectCover: () => void;
   onDelete: () => void;
 }) {
   const drag = useReorderableDrag();
@@ -397,12 +575,35 @@ function PostRow({
   return (
     <View className="mb-2 flex-row items-center gap-3 rounded-tile bg-glass p-2">
       {post.imageUrl ? (
-        <Image
-          source={{ uri: post.imageUrl }}
-          placeholder={post.blurhash ? { blurhash: post.blurhash } : undefined}
-          style={{ width: 52, height: 68, borderRadius: 8 }}
-          contentFit="cover"
-        />
+        <Pressable
+          accessibilityRole={canCustomize ? 'button' : undefined}
+          accessibilityLabel={canCustomize ? 'Bruk som albumcover' : undefined}
+          accessibilityState={canCustomize ? { selected: isCover } : undefined}
+          disabled={!canCustomize}
+          onPress={onSelectCover}>
+          <Image
+            source={{ uri: post.imageUrl }}
+            placeholder={post.blurhash ? { blurhash: post.blurhash } : undefined}
+            style={{
+              width: 52,
+              height: 68,
+              borderRadius: 8,
+              borderWidth: isCover ? 2 : 0,
+              borderColor: '#ffffff',
+            }}
+            contentFit="cover"
+          />
+          {isCover ? (
+            <View className="absolute right-1 top-1 h-5 w-5 items-center justify-center rounded-full bg-ink">
+              <SymbolView
+                name="checkmark"
+                size={10}
+                tintColor="#000000"
+                fallback={<Text className="text-[9px] text-black">✓</Text>}
+              />
+            </View>
+          ) : null}
+        </Pressable>
       ) : null}
 
       <View className="flex-1">
@@ -417,6 +618,31 @@ function PostRow({
           </Text>
         ) : null}
       </View>
+
+      {canDownload ? (
+        <NativePostButton
+          label={
+            downloadState === 'saving'
+              ? 'Lagrer filen'
+              : downloadState === 'saved'
+                ? 'Lagret i Bilder'
+                : post.videoUrl
+                  ? 'Lagre videoen i Bilder'
+                  : 'Lagre bildet i Bilder'
+          }
+          systemImage={
+            downloadState === 'saving'
+              ? 'hourglass'
+              : downloadState === 'saved'
+                ? 'checkmark'
+                : 'square.and.arrow.down'
+          }
+          disabled={busy || downloadState === 'saving'}
+          tintColor={downloadState === 'saved' ? '#34c759' : '#b0b4ba'}
+          size={36}
+          onPress={onDownload}
+        />
+      ) : null}
 
       <Pressable
         accessibilityRole="button"

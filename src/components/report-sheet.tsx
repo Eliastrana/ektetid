@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { ErrorNotice } from '@/components/error-notice';
 import type { ReportReason } from '@/lib/database.types';
 import { REPORT_REASONS, blockAndReport, type ReportTarget } from '@/lib/moderation';
 
@@ -135,7 +136,11 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
                 </Text>
               </Pressable>
 
-              {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
+              {error ? (
+                <View className="mt-3">
+                  <ErrorNotice message={error} />
+                </View>
+              ) : null}
 
               <Pressable
                 accessibilityRole="button"

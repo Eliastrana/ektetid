@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { Screen } from '@/components/screen';
+import { ErrorNotice } from '@/components/error-notice';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { errorMessage } from '@/lib/errors';
 
@@ -66,14 +67,14 @@ export default function SignInScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen className="flex-1 justify-between px-6 py-4">
-          <View className="mt-20">
+          <View className="mt-10">
             <Text className="text-7xl text-ink">EkteTid</Text>
             <Text className="mt-3 text-xl text-muted">Det er tid for å være ekte</Text>
           </View>
 
           <View className="gap-3">
             {error ? (
-              <Text className="mb-1 text-center text-sm text-alert">{error}</Text>
+              <ErrorNotice message={error} />
             ) : null}
 
             {step === 'code' ? (

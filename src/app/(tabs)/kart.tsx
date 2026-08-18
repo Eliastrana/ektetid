@@ -1,14 +1,20 @@
 import { Image } from 'expo-image';
 import { AppleMaps } from 'expo-maps';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Dimensions, Platform, Pressable, Text, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, withTiming } from 'react-native-reanimated';
 
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { Segmented } from '@/components/segmented';
-import { fetchLocatedPosts, regionFor, type LocatedPost, type MapFilter } from '@/lib/map';
+import {
+  fetchLocatedPosts,
+  hydrateLocatedPostImages,
+  regionFor,
+  type LocatedPost,
+  type MapFilter,
+} from '@/lib/map';
 import { PinFactory } from '@/components/pin-factory';
 import type { ImageRef } from 'expo-image';
 
@@ -16,6 +22,28 @@ const FILTERS: { value: MapFilter; label: string }[] = [
   { value: 'all', label: 'Alle' },
   { value: 'mine', label: 'Mine' },
 ];
+
+/** Keep the previous map ready while a fresh query revalidates on focus. */
+const mapCache = new Map<string, LocatedPost[]>();
+
+function mapCacheKey(filter: MapFilter, selfId?: string): string {
+  return `${selfId ?? 'anonymous'}:${filter}`;
+}
+
+/** Preserve already-signed thumbnail URLs across a background refresh. */
+function mergeCachedImages(fresh: LocatedPost[], cached: LocatedPost[] | undefined): LocatedPost[] {
+  if (!cached?.length) return fresh;
+
+  const urlsByPath = new Map<string, string>();
+  for (const post of cached) {
+    if (post.imageUrl) urlsByPath.set(post.imagePath, post.imageUrl);
+  }
+
+  return fresh.map((post) => ({
+    ...post,
+    imageUrl: urlsByPath.get(post.imagePath) ?? null,
+  }));
+}
 
 /**
  * The preview card rising into place under the pin that was tapped.
@@ -55,19 +83,47 @@ function cardExit() {
 
 export default function MapScreen() {
   const router = useRouter();
+  const viewport = useWindowDimensions();
   const { session } = useAuth();
   const selfId = session?.user.id;
   const [filter, setFilter] = useState<MapFilter>('all');
   const [posts, setPosts] = useState<LocatedPost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<LocatedPost | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [icons, setIcons] = useState<Map<string, ImageRef>>(new Map());
+  const loadToken = useRef(0);
 
   const load = useCallback(async () => {
+    const token = ++loadToken.current;
+    const cacheKey = mapCacheKey(filter, selfId);
+    const cached = mapCache.get(cacheKey);
+
+    if (cached) {
+      setPosts(cached);
+      setLoading(false);
+    } else {
+      setPosts([]);
+      setLoading(true);
+    }
+
     try {
       // Pins are placed immediately with a fallback glyph; PinFactory renders
       // and captures the photo versions in the background and swaps them in.
-      setPosts(await fetchLocatedPosts(filter, selfId));
+      const located = await fetchLocatedPosts(filter, selfId);
+      if (token !== loadToken.current) return;
+      const immediate = mergeCachedImages(located, cached);
+      mapCache.set(cacheKey, immediate);
+      setPosts(immediate);
+      setLoading(false);
+      // Coordinates and fallback pins are interactive now. Photo icons replace
+      // them progressively once the signed thumbnail URLs arrive.
+      void hydrateLocatedPostImages(immediate)
+        .then((hydrated) => {
+          if (token !== loadToken.current) return;
+          mapCache.set(cacheKey, hydrated);
+          setPosts(hydrated);
+        })
+        .catch(() => {});
     } catch {
       // Leave whatever is on screen; the map is not worth an error state of
       // its own when the feed will already have surfaced a connection problem.
@@ -79,31 +135,59 @@ export default function MapScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      return () => {
+        loadToken.current += 1;
+      };
     }, [load])
   );
 
   const region = useMemo(() => regionFor(posts), [posts]);
-
+  const selected = useMemo(
+    () => (selectedId ? (posts.find((post) => post.id === selectedId) ?? null) : null),
+    [posts, selectedId]
+  );
 
   /**
-   * Annotations rather than markers, because only annotations take a custom
-   * icon — a marker is limited to an SF Symbol or a monogram.
-   *
-   * Posts whose thumbnail has not loaded, or that fall past the photo cap,
-   * still get an annotation; they simply show the camera glyph instead.
+   * Photo-backed annotations. Expo Maps annotations are the Apple Maps API
+   * that accepts a decoded custom ImageRef.
    */
   const annotations = useMemo(
     () =>
-      posts.map((post) => {
+      posts.flatMap((post) => {
         const icon = icons.get(post.id);
-        return {
-          id: post.id,
-          coordinates: { latitude: post.latitude, longitude: post.longitude },
-          title: post.title ?? post.location ?? 'Øyeblikk',
-          backgroundColor: '#000000',
-          tintColor: '#ffffff',
-          ...(icon ? { icon } : { systemImage: 'camera.fill' }),
-        };
+        if (!icon) return [];
+
+        return [
+          {
+            id: post.id,
+            coordinates: { latitude: post.latitude, longitude: post.longitude },
+            title: post.title ?? post.location ?? 'Øyeblikk',
+            icon,
+          },
+        ];
+      }),
+    [icons, posts]
+  );
+
+  /**
+   * Expo Maps gives system-image styling to native markers, while annotations
+   * are the custom-image API. Keeping the two paths separate avoids the thin
+   * black annotation artifacts that appeared before a photo icon was ready.
+   */
+  const markers = useMemo(
+    () =>
+      posts.flatMap((post) => {
+        if (icons.has(post.id)) return [];
+
+        return [
+          {
+            id: post.id,
+            coordinates: { latitude: post.latitude, longitude: post.longitude },
+            title: post.title ?? post.location ?? 'Øyeblikk',
+            systemImage: 'camera.fill',
+            tintColor: '#111111',
+          },
+        ];
       }),
     [icons, posts]
   );
@@ -128,18 +212,17 @@ export default function MapScreen() {
           style={{ flex: 1 }}
           cameraPosition={{
             coordinates: { latitude: region.latitude, longitude: region.longitude },
-            zoom: zoomFor(region),
+            zoom: zoomFor(region, viewport),
           }}
           annotations={annotations}
+          markers={markers}
           uiSettings={{ compassEnabled: false, scaleBarEnabled: false }}
           properties={{ isMyLocationEnabled: true }}
           onMarkerClick={(marker) => {
-            const match = posts.find((post) => post.id === marker.id);
-            setSelected(match ?? null);
+            setSelectedId(marker.id ?? null);
           }}
           onAnnotationClick={(annotation) => {
-            const match = posts.find((post) => post.id === annotation.id);
-            setSelected(match ?? null);
+            setSelectedId(annotation.id ?? null);
           }}
         />
       ) : (
@@ -179,7 +262,7 @@ export default function MapScreen() {
             onChange={(next) => {
               // Clear the card: the selected pin may not survive the filter
               // change, and a card for a hidden pin is confusing.
-              setSelected(null);
+              setSelectedId(null);
               setFilter(next);
             }}
           />
@@ -269,8 +352,11 @@ function mercatorY(latitude: number): number {
  * longitude. The usable height excludes the chrome, since a pin behind the
  * header is as invisible as one past the edge.
  */
-function zoomFor(region: { latitudeDelta: number; longitudeDelta: number; latitude: number }): number {
-  const { width, height } = Dimensions.get('window');
+function zoomFor(
+  region: { latitudeDelta: number; longitudeDelta: number; latitude: number },
+  viewport: { width: number; height: number }
+): number {
+  const { width, height } = viewport;
   const usableHeight = Math.max(height - CHROME_HEIGHT, 120);
 
   const longitudeFraction = Math.max(region.longitudeDelta, 0.001) / 360;

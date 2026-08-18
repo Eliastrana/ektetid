@@ -129,6 +129,9 @@ export type Database = {
       }
       albums: {
         Row: {
+          accent_color: string
+          cover_layout: string
+          cover_post_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -137,6 +140,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          accent_color?: string
+          cover_layout?: string
+          cover_post_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -145,6 +151,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          accent_color?: string
+          cover_layout?: string
+          cover_post_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -153,6 +162,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "albums_cover_post_id_fkey"
+            columns: ["cover_post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "albums_owner_id_fkey"
             columns: ["owner_id"]
@@ -168,6 +184,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          parent_comment_id: string | null
           post_id: string
         }
         Insert: {
@@ -175,6 +192,7 @@ export type Database = {
           body: string
           created_at?: string
           id?: string
+          parent_comment_id?: string | null
           post_id: string
         }
         Update: {
@@ -182,6 +200,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
+          parent_comment_id?: string | null
           post_id?: string
         }
         Relationships: [
@@ -193,10 +212,50 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "comments_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_likes: {
+        Row: {
+          comment_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_likes_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -319,6 +378,7 @@ export type Database = {
           created_at: string
           description: string | null
           exif: Json | null
+          filter_name: string
           id: string
           image_path: string
           latitude: number | null
@@ -326,9 +386,11 @@ export type Database = {
           longitude: number | null
           luminance: number | null
           position: number
+          rating: number | null
           selfie_path: string | null
           taken_at: string
           title: string | null
+          thumbnail_path: string | null
           video_path: string | null
         }
         Insert: {
@@ -338,6 +400,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           exif?: Json | null
+          filter_name?: string
           id?: string
           image_path: string
           latitude?: number | null
@@ -345,9 +408,11 @@ export type Database = {
           longitude?: number | null
           luminance?: number | null
           position: number
+          rating?: number | null
           selfie_path?: string | null
           taken_at?: string
           title?: string | null
+          thumbnail_path?: string | null
           video_path?: string | null
         }
         Update: {
@@ -357,6 +422,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           exif?: Json | null
+          filter_name?: string
           id?: string
           image_path?: string
           latitude?: number | null
@@ -364,9 +430,11 @@ export type Database = {
           longitude?: number | null
           luminance?: number | null
           position?: number
+          rating?: number | null
           selfie_path?: string | null
           taken_at?: string
           title?: string | null
+          thumbnail_path?: string | null
           video_path?: string | null
         }
         Relationships: [
@@ -388,6 +456,74 @@ export type Database = {
             foreignKeyName: "posts_author_id_fkey"
             columns: ["author_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_views: {
+        Row: {
+          first_seen_at: string
+          last_seen_at: string
+          post_id: string
+          view_count: number
+          viewer_id: string
+        }
+        Insert: {
+          first_seen_at?: string
+          last_seen_at?: string
+          post_id: string
+          view_count?: number
+          viewer_id: string
+        }
+        Update: {
+          first_seen_at?: string
+          last_seen_at?: string
+          post_id?: string
+          view_count?: number
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pro_entitlements: {
+        Row: {
+          granted_at: string
+          source: Database["public"]["Enums"]["pro_source"]
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          source: Database["public"]["Enums"]["pro_source"]
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          source?: Database["public"]["Enums"]["pro_source"]
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pro_entitlements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -547,8 +683,11 @@ export type Database = {
     Views: {
       album_feed: {
         Row: {
+          accent_color: string | null
           cover_blurhash: string | null
           cover_image_path: string | null
+          cover_layout: string | null
+          cover_post_id: string | null
           cover_taken_at: string | null
           created_at: string | null
           description: string | null
@@ -586,14 +725,17 @@ export type Database = {
           p_blurhash?: string
           p_description?: string
           p_exif?: Json
+          p_filter_name?: string
           p_image_path: string
           p_latitude?: number
           p_location?: string
           p_longitude?: number
           p_luminance?: number
+          p_rating?: number
           p_selfie_path?: string
           p_taken_at?: string
           p_title?: string
+          p_thumbnail_path?: string
           p_video_path?: string
         }
         Returns: {
@@ -603,6 +745,7 @@ export type Database = {
           created_at: string
           description: string | null
           exif: Json | null
+          filter_name: string
           id: string
           image_path: string
           latitude: number | null
@@ -610,9 +753,11 @@ export type Database = {
           longitude: number | null
           luminance: number | null
           position: number
+          rating: number | null
           selfie_path: string | null
           taken_at: string
           title: string | null
+          thumbnail_path: string | null
           video_path: string | null
         }
         SetofOptions: {
@@ -622,20 +767,56 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      friend_suggestions: {
+        Args: { p_limit?: number }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          mutual_count: number
+          username: string
+        }[]
+      }
+      has_pro: { Args: { who: string }; Returns: boolean }
       is_album_member: {
         Args: { album: string; who: string }
         Returns: boolean
       }
       is_blocked: { Args: { a: string; b: string }; Returns: boolean }
       owns_album: { Args: { album: string }; Returns: boolean }
+      pro_memories: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          album_id: string
+          album_title: string
+          blurhash: string
+          description: string
+          id: string
+          image_path: string
+          taken_at: string
+          title: string
+        }[]
+      }
+      record_post_view: { Args: { p_post_id: string }; Returns: undefined }
       reorder_album: {
         Args: { p_album_id: string; p_post_ids: string[] }
         Returns: undefined
       }
       shares_album_with: { Args: { a: string; b: string }; Returns: boolean }
+      update_album_customization: {
+        Args: {
+          p_accent_color: string
+          p_album_id: string
+          p_cover_layout: string
+          p_cover_post_id: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       friendship_status: "pending" | "accepted" | "blocked"
+      pro_source: "purchase" | "activity"
       report_reason: "spam" | "harassment" | "nudity" | "violence" | "other"
     }
     CompositeTypes: {
@@ -768,6 +949,7 @@ export const Constants = {
   public: {
     Enums: {
       friendship_status: ["pending", "accepted", "blocked"],
+      pro_source: ["purchase", "activity"],
       report_reason: ["spam", "harassment", "nudity", "violence", "other"],
     },
   },

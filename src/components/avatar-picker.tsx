@@ -12,11 +12,12 @@ type Props = {
   avatarUrl: string | null;
   /** Initial shown when there is no picture. */
   initials: string;
+  pro?: boolean;
   onChanged: () => void | Promise<void>;
 };
 
 /** Tap to set a profile picture; long-press to remove it. */
-export function AvatarPicker({ userId, avatarUrl, initials, onChanged }: Props) {
+export function AvatarPicker({ userId, avatarUrl, initials, pro = false, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
 
   async function choose() {
@@ -69,7 +70,9 @@ export function AvatarPicker({ userId, avatarUrl, initials, onChanged }: Props) 
       onLongPress={confirmRemove}
       disabled={busy}
       className="active:opacity-80">
-      <View className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-glass">
+      <View
+        className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-glass"
+        style={pro ? { borderWidth: 2, borderColor: '#ffffff' } : undefined}>
         {busy ? (
           <ActivityIndicator color="#ffffff" />
         ) : avatarUrl ? (

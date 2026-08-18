@@ -9,4 +9,4 @@
  * A no-op hook rather than an absent one, because the root layout calls it
  * unconditionally and should not have to know which platform it is on.
  */
-export function useNotificationRouting(): void {}
+export function useNotificationRouting(_enabled = true): void {}

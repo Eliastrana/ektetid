@@ -10,6 +10,8 @@ export type LocatedPost = {
   latitude: number;
   longitude: number;
   imageUrl: string | null;
+  /** Storage path resolved after the coordinate-only result is on screen. */
+  imagePath: string;
   blurhash: string | null;
 };
 
@@ -22,6 +24,14 @@ export type MapRegion = {
 
 /** Whose pins to show. */
 export type MapFilter = 'all' | 'mine';
+
+/**
+ * Maximum number of photo-backed map pins.
+ *
+ * Beyond this density the thumbnails overlap, while signing and decoding more
+ * media still competes with the native map for bandwidth and main-thread time.
+ */
+export const MAX_MAP_PHOTO_PINS = 30;
 
 /**
  * Posts with coordinates that the caller can see.
@@ -37,7 +47,9 @@ export async function fetchLocatedPosts(
 ): Promise<LocatedPost[]> {
   let query = supabase
     .from('posts')
-    .select('id, album_id, title, location, taken_at, latitude, longitude, image_path, blurhash')
+    .select(
+      'id, album_id, title, location, taken_at, latitude, longitude, image_path, thumbnail_path, blurhash'
+    )
     .not('latitude', 'is', null)
     .not('longitude', 'is', null);
 
@@ -49,9 +61,8 @@ export async function fetchLocatedPosts(
 
   if (error) throw error;
 
-  const paths = data.map((post) => post.image_path).filter((p): p is string => !!p);
-  const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
-
+  // New posts carry a 192px derivative made specifically for compact
+  // surfaces. Older rows fall back to the original until the backfill runs.
   return data.map((post) => ({
     id: post.id,
     albumId: post.album_id,
@@ -60,9 +71,23 @@ export async function fetchLocatedPosts(
     takenAt: post.taken_at,
     latitude: post.latitude!,
     longitude: post.longitude!,
-    imageUrl: post.image_path ? (urls.get(post.image_path) ?? null) : null,
+    imageUrl: null,
+    imagePath: post.thumbnail_path ?? post.image_path,
     blurhash: post.blurhash,
   }));
+}
+
+/**
+ * Resolve pin media after coordinates have already mounted the native map.
+ * Signing and downloading images is useful decoration, not a prerequisite for
+ * panning or selecting fallback camera pins.
+ */
+export async function hydrateLocatedPostImages(
+  posts: LocatedPost[]
+): Promise<LocatedPost[]> {
+  const photoPosts = posts.slice(0, MAX_MAP_PHOTO_PINS);
+  const urls = await signedUrls(photoPosts.map((post) => post.imagePath));
+  return posts.map((post) => ({ ...post, imageUrl: urls.get(post.imagePath) ?? null }));
 }
 
 /** Padding around the outermost pins, as a fraction of their spread. */

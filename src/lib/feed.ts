@@ -1,6 +1,7 @@
 import type { AlbumFeedRow } from '@/lib/database.types';
 import { signedUrls } from '@/lib/images';
 import { supabase } from '@/lib/supabase';
+import { hasPro } from '@/lib/social';
 
 export type FeedAlbum = AlbumFeedRow & {
   coverUrl: string | null;
@@ -12,6 +13,13 @@ export type FeedAlbum = AlbumFeedRow & {
    * all one person's albums, where the distinction cannot arise.
    */
   shared?: boolean;
+  ownerPro?: boolean;
+};
+
+export type FeedResult = {
+  albums: FeedAlbum[];
+  /** Whether the person viewing the feed already owns or earned Pro. */
+  viewerPro: boolean;
 };
 
 /**
@@ -22,7 +30,7 @@ export type FeedAlbum = AlbumFeedRow & {
  * view. The web version fetched every album, counted images client-side, and
  * diffed against localStorage to work out the badge.
  */
-export async function fetchFeed(userId: string): Promise<FeedAlbum[]> {
+export async function fetchFeed(userId: string): Promise<FeedResult> {
   /*
    * Memberships are fetched alongside the feed rather than joined into it.
    *
@@ -51,10 +59,23 @@ export async function fetchFeed(userId: string): Promise<FeedAlbum[]> {
   const urls = coverPaths.length ? await signedUrls(coverPaths) : new Map<string, string>();
 
   const shared = new Set((await memberships).data?.map((row) => row.album_id) ?? []);
+  // Include the viewer even when they have no album yet. This lets the header
+  // hide its Pro invitation for someone who purchased Pro before posting,
+  // without a second status request from the screen.
+  const ownerIds = [
+    ...new Set([userId, ...data.map((album) => album.owner_id).filter(Boolean)]),
+  ] as string[];
+  const proOwners = new Map(
+    await Promise.all(ownerIds.map(async (ownerId) => [ownerId, await hasPro(ownerId)] as const))
+  );
 
-  return data.map((album) => ({
-    ...album,
-    coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
-    shared: !!album.id && shared.has(album.id),
-  }));
+  return {
+    viewerPro: proOwners.get(userId) ?? false,
+    albums: data.map((album) => ({
+      ...album,
+      coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
+      shared: !!album.id && shared.has(album.id),
+      ownerPro: album.owner_id ? (proOwners.get(album.owner_id) ?? false) : false,
+    })),
+  };
 }

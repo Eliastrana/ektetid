@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Open whatever a tapped notification was about.
@@ -15,32 +15,45 @@ import { useEffect } from 'react';
  * appears to do nothing at all in the case where the user is least likely to
  * already be looking at the right screen.
  */
-export function useNotificationRouting(): void {
+export function useNotificationRouting(enabled = true): void {
   const router = useRouter();
+  const lastHandledId = useRef<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!enabled) return;
 
     const open = (response: Notifications.NotificationResponse | null) => {
+      const notificationId = response?.notification.request.identifier;
       const url = response?.notification.request.content.data?.url;
-      if (typeof url !== 'string') return;
+      if (
+        typeof url !== 'string' ||
+        !notificationId ||
+        notificationId === lastHandledId.current
+      ) {
+        return;
+      }
+      lastHandledId.current = notificationId;
 
       // Strip the scheme: expo-router wants an in-app path, and passing the
       // full URL routes to a screen that does not exist.
       const path = url.replace(/^ektetid:\/\//, '');
-      if (path) router.push(path as never);
+      if (!path) return;
+
+      // The response is single-use. Clearing it avoids reopening the same
+      // screen if the root layout is mounted again later in this session.
+      Notifications.clearLastNotificationResponse();
+      router.push(path as never);
     };
 
     // A cold start has its response waiting rather than arriving as an event.
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (!cancelled) open(response);
-    });
+    // The synchronous SDK 57 API avoids adding another loading dependency to
+    // app launch; this hook is enabled only once the protected routes exist.
+    open(Notifications.getLastNotificationResponse());
 
     const subscription = Notifications.addNotificationResponseReceivedListener(open);
 
     return () => {
-      cancelled = true;
       subscription.remove();
     };
-  }, [router]);
+  }, [enabled, router]);
 }

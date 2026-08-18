@@ -2,7 +2,25 @@ import type { Comment, Profile } from '@/lib/database.types';
 import { notify } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
-export type CommentWithAuthor = Comment & { author: Pick<Profile, 'username' | 'avatar_url'> };
+export type CommentWithAuthor = Comment & {
+  author: Pick<Profile, 'username' | 'avatar_url'>;
+  likeCount: number;
+  likedByMe: boolean;
+};
+
+export type SocialProfile = Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
+
+export type Liker = {
+  created_at: string;
+  user: SocialProfile;
+};
+
+export type PostViewer = {
+  first_seen_at: string;
+  last_seen_at: string;
+  view_count: number;
+  viewer: SocialProfile;
+};
 
 // ---------------------------------------------------------------------------
 // likes
@@ -21,6 +39,41 @@ export async function fetchLikes(postId: string, selfId: string): Promise<LikeSt
   ]);
 
   return { count: count ?? 0, likedByMe: !!mine.data };
+}
+
+export async function fetchLikers(postId: string): Promise<Liker[]> {
+  const { data, error } = await supabase
+    .from('likes')
+    .select(
+      'created_at, user:profiles!likes_user_id_fkey(id, username, display_name, avatar_url)'
+    )
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data as unknown as Liker[];
+}
+
+export async function recordPostView(postId: string): Promise<void> {
+  const { error } = await supabase.rpc('record_post_view', { p_post_id: postId });
+  if (error) throw error;
+}
+
+export async function fetchPostViewers(postId: string): Promise<PostViewer[]> {
+  const { data, error } = await supabase
+    .from('post_views')
+    .select(
+      'first_seen_at, last_seen_at, view_count, viewer:profiles!post_views_viewer_id_fkey(id, username, display_name, avatar_url)'
+    )
+    .eq('post_id', postId)
+    .order('last_seen_at', { ascending: false });
+  if (error) throw error;
+  return data as unknown as PostViewer[];
+}
+
+export async function hasPro(userId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('has_pro', { who: userId });
+  if (error) throw error;
+  return data;
 }
 
 /** Toggle a like. Returns the new state so callers can reconcile after an optimistic update. */
@@ -58,7 +111,10 @@ export async function toggleLike(
 // comments
 // ---------------------------------------------------------------------------
 
-export async function fetchComments(postId: string): Promise<CommentWithAuthor[]> {
+export async function fetchComments(
+  postId: string,
+  selfId?: string
+): Promise<CommentWithAuthor[]> {
   const { data, error } = await supabase
     .from('comments')
     .select('*, author:profiles!comments_author_id_fkey(username, avatar_url)')
@@ -66,17 +122,71 @@ export async function fetchComments(postId: string): Promise<CommentWithAuthor[]
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data as unknown as CommentWithAuthor[];
+  const comments = data as unknown as (Comment & {
+    author: Pick<Profile, 'username' | 'avatar_url'>;
+  })[];
+  const ids = comments.map((comment) => comment.id);
+  if (!ids.length) return [];
+
+  const likes = await supabase
+    .from('comment_likes')
+    .select('comment_id, user_id')
+    .in('comment_id', ids);
+  if (likes.error) throw likes.error;
+
+  const counts = new Map<string, number>();
+  const mine = new Set<string>();
+  for (const like of likes.data) {
+    counts.set(like.comment_id, (counts.get(like.comment_id) ?? 0) + 1);
+    if (selfId && like.user_id === selfId) mine.add(like.comment_id);
+  }
+
+  const enriched = comments.map((comment) => ({
+    ...comment,
+    likeCount: counts.get(comment.id) ?? 0,
+    likedByMe: mine.has(comment.id),
+  }));
+
+  const roots = enriched.filter((comment) => !comment.parent_comment_id);
+  const replies = enriched.filter((comment) => !!comment.parent_comment_id);
+  return roots.flatMap((root) => [
+    root,
+    ...replies
+      .filter((reply) => reply.parent_comment_id === root.id)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+  ]);
 }
 
-export async function addComment(postId: string, selfId: string, body: string): Promise<void> {
+export async function addComment(
+  postId: string,
+  selfId: string,
+  body: string,
+  parentCommentId?: string | null
+): Promise<void> {
   const { data, error } = await supabase
     .from('comments')
-    .insert({ post_id: postId, author_id: selfId, body: body.trim() })
+    .insert({
+      post_id: postId,
+      author_id: selfId,
+      body: body.trim(),
+      parent_comment_id: parentCommentId ?? null,
+    })
     .select('id')
     .single();
   if (error) throw error;
   notify('comment', data.id);
+}
+
+export async function toggleCommentLike(
+  commentId: string,
+  selfId: string,
+  currentlyLiked: boolean
+): Promise<void> {
+  const query = supabase.from('comment_likes');
+  const { error } = currentlyLiked
+    ? await query.delete().eq('comment_id', commentId).eq('user_id', selfId)
+    : await query.insert({ comment_id: commentId, user_id: selfId });
+  if (error && error.code !== '23505') throw error;
 }
 
 export async function deleteComment(commentId: string): Promise<void> {
@@ -97,6 +207,11 @@ export function subscribeToComments(postId: string, onChange: () => void): () =>
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${postId}` },
+      onChange
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'comment_likes' },
       onChange
     )
     .subscribe();

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/components/auth-provider';
+import { ErrorNotice } from '@/components/error-notice';
 import { Screen } from '@/components/screen';
 import { setUsername } from '@/lib/auth';
 
@@ -70,7 +71,11 @@ export default function ChooseUsernameScreen() {
             3–24 tegn. Små bokstaver, tall og understrek.
           </Text>
 
-          {error ? <Text className="mt-3 text-sm text-alert">{error}</Text> : null}
+          {error ? (
+            <View className="mt-3">
+              <ErrorNotice message={error} />
+            </View>
+          ) : null}
         </View>
 
         <Pressable

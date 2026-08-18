@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   View,
@@ -19,8 +20,10 @@ import {
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { SelfieSlot } from '@/components/selfie-slot';
+import { ErrorNotice } from '@/components/error-notice';
 import { errorMessage } from '@/lib/errors';
 import { exifCoordinates, type Coordinates } from '@/lib/geo';
+import { archivePublishedCapture } from '@/lib/local-archive';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
 import {
   createAlbum,
@@ -34,6 +37,7 @@ const PROGRESS_LABEL: Record<PublishProgress, string> = {
   processing: 'Behandler bildet…',
   uploading: 'Laster opp…',
   saving: 'Lagrer…',
+  archiving: 'Legger i EkteTid-albumet…',
 };
 
 export default function NewPostScreen() {
@@ -48,6 +52,8 @@ export default function NewPostScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [ratingEnabled, setRatingEnabled] = useState(false);
+  const [rating, setRating] = useState(4);
   const [albums, setAlbums] = useState<WritableAlbum[]>([]);
   const [albumId, setAlbumId] = useState<string | null>(null);
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
@@ -120,9 +126,15 @@ export default function NewPostScreen() {
           location,
           takenAt: new Date(),
           coordinates,
+          rating: ratingEnabled ? rating : null,
         },
         setProgress
       );
+
+      // Pro's local archive is best effort. The post is already safely stored,
+      // so Photos permission or a device-side album error cannot undo it.
+      setProgress('archiving');
+      await archivePublishedCapture(userId, capture).catch(() => false);
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       clearPendingCapture();
@@ -145,6 +157,8 @@ export default function NewPostScreen() {
     location,
     newAlbumTitle,
     progress,
+    rating,
+    ratingEnabled,
     router,
     selfieUri,
     title,
@@ -212,6 +226,44 @@ export default function NewPostScreen() {
               className="mt-3 h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
             />
 
+            <View className="mt-3 rounded-tile bg-glass p-4">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1 pr-4">
+                  <Text className="text-base text-ink">Terningkast</Text>
+                  <Text className="mt-0.5 text-xs text-muted">
+                    Vises som et overlay på innlegget
+                  </Text>
+                </View>
+                <Switch value={ratingEnabled} onValueChange={setRatingEnabled} />
+              </View>
+
+              {ratingEnabled ? (
+                <View className="mt-4 flex-row justify-between gap-2">
+                  {[1, 2, 3, 4, 5, 6].map((value) => {
+                    const selected = rating === value;
+                    return (
+                      <Pressable
+                        key={value}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Terningkast ${value}`}
+                        accessibilityState={{ selected }}
+                        onPress={() => {
+                          void Haptics.selectionAsync();
+                          setRating(value);
+                        }}
+                        className={`h-11 flex-1 items-center justify-center rounded-xl ${
+                          selected ? 'bg-ink' : 'bg-surface-raised'
+                        }`}>
+                        <Text className={`text-lg ${selected ? 'text-canvas' : 'text-ink'}`}>
+                          {value}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+
             <Text className="mb-2 mt-6 text-sm text-muted">Album</Text>
             <View className="flex-row flex-wrap gap-2">
               {albums.map((album) => {
@@ -261,7 +313,11 @@ export default function NewPostScreen() {
               className="mt-3 h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
             />
 
-            {error ? <Text className="mt-4 text-sm text-alert">{error}</Text> : null}
+            {error ? (
+              <View className="mt-4">
+                <ErrorNotice message={error} />
+              </View>
+            ) : null}
             <View className="h-6" />
           </ScrollView>
 

@@ -5,20 +5,19 @@ import {
   type CameraCapturedPicture,
   type FlashMode,
 } from 'expo-camera';
+import SegmentedControl from '@react-native-segmented-control/segmented-control';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut, ZoomIn, runOnJS } from 'react-native-reanimated';
-
-import Svg, { Circle } from 'react-native-svg';
-
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { Easing, FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 import { Screen } from '@/components/screen';
+import { ErrorNotice } from '@/components/error-notice';
+import { NativeCameraButton } from '@/components/native-camera-button';
+import { NativeShutterButton } from '@/components/native-shutter-button';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 
 import { setPendingCapture } from '@/lib/pending-capture';
@@ -34,18 +33,8 @@ import { setPendingCapture } from '@/lib/pending-capture';
  */
 const SELFIE_COUNTDOWN = 3;
 
-/** Longest clip a held shutter records, in seconds. */
+/** Longest clip a video-mode shutter records, in seconds. */
 const MAX_VIDEO_SECONDS = 10;
-
-/**
- * How long the shutter must be held before it starts recording.
- *
- * Below this a press is a photo. It also covers the camera session switching
- * from picture to video mode, which cannot be done in advance: the two use
- * different session configurations, and staying in video mode would drop every
- * still to video resolution.
- */
-const HOLD_TO_RECORD_MS = 300;
 
 /**
  * The zoom options to offer, given what the device reports.
@@ -96,10 +85,8 @@ export default function CameraScreen() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [mode, setMode] = useState<'picture' | 'video'>('picture');
   const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   /** Covers the preview while the capture session changes shape. */
   const [switching, setSwitching] = useState(false);
-  const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Set when the press turned into a recording, so release knows what to do. */
   const recordingRef = useRef(false);
 
@@ -144,29 +131,19 @@ export default function CameraScreen() {
     }
   }, []);
 
-  /**
-   * Record until the shutter is released, or ten seconds, whichever is first.
-   *
-   * The promise from recordAsync does not settle until recording stops, so the
-   * release handler calls stopRecording and this resolves with the file. The
-   * maxDuration cap is enforced natively as well, which is what stops a finger
-   * left on the button from filling the disk.
-   */
+  /** Record until the shutter is tapped again, or ten seconds. */
   const runRecording = useCallback(async () => {
     try {
       setError(null);
+      setStage('back');
       setRecording(true);
       recordingRef.current = true;
-      setElapsed(0);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-
-      tickTimer.current = setInterval(() => setElapsed((value) => value + 0.1), 100);
 
       const clip = await cameraRef.current?.recordAsync({
         maxDuration: MAX_VIDEO_SECONDS,
       });
 
-      if (tickTimer.current) clearInterval(tickTimer.current);
       setRecording(false);
       recordingRef.current = false;
 
@@ -197,10 +174,8 @@ export default function CameraScreen() {
       setError(caught instanceof Error ? caught.message : 'Klarte ikke å ta opp video.');
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      if (tickTimer.current) clearInterval(tickTimer.current);
       setRecording(false);
       recordingRef.current = false;
-      setElapsed(0);
       setMode('picture');
       setFacing('back');
       setStage('idle');
@@ -209,32 +184,13 @@ export default function CameraScreen() {
     }
   }, [captureSelfie, router]);
 
-  /** Held long enough to mean video: switch the session over and start. */
-  const beginHold = useCallback(() => {
-    if (stage !== 'idle' || recordingRef.current) return;
-    // Cover the preview before the session changes shape, not after.
-    setSwitching(true);
-    setMode('video');
-    setStage('back');
-    // The session needs a moment to reconfigure before it will record.
-    setTimeout(() => {
-      setSwitching(false);
-      void runRecording();
-    }, 260);
-  }, [runRecording, stage]);
-
-  /** Released: stop the recording, wherever the finger happens to be. */
-  const endHold = useCallback(() => {
-    if (recordingRef.current) cameraRef.current?.stopRecording();
-  }, []);
-
   /*
    * Ask for the microphone as soon as the camera screen opens.
    *
    * Not when recording starts: the system dialog steals the first second or
    * two of a clip that is capped at ten, so the first video anyone records
    * would be the one ruined by the prompt. Asking here costs nothing — the
-   * user has already chosen to open the camera — and by the time they hold the
+   * user has already chosen to open the camera — and by the time they select
    * shutter the answer is in.
    */
   useEffect(() => {
@@ -244,8 +200,6 @@ export default function CameraScreen() {
   }, [micPermission, permission?.granted, requestMicPermission]);
 
   const capturePair = useCallback(async () => {
-    // The press became a recording, so the tap that follows release is not a
-    // request for a photo.
     if (recordingRef.current || mode === 'video') return;
     if (stage !== 'idle') return;
     if (!cameraRef.current) {
@@ -293,34 +247,27 @@ export default function CameraScreen() {
     }
   }, [captureSelfie, mode, router, stage]);
 
-  /*
-   * The shutter's gestures, declared after the handlers they call.
-   *
-   * Every function here has to be a real value the worklet can capture. It
-   * previously reached the tap handler through a ref, reading `.current` inside
-   * the worklet — a React ref lives on the JavaScript side, and dereferencing
-   * one on the UI thread crashed the app the moment anyone took a photo.
-   *
-   * A Pressable was wrong for the hold: onPressOut fires when the touch is
-   * cancelled as well as when it ends, so sliding a thumb off the button
-   * stopped the recording mid-clip. A long press with an effectively unlimited
-   * maxDistance keeps following the finger until it actually lifts.
-   */
-  const takePhoto = useCallback(() => {
-    void capturePair();
-  }, [capturePair]);
+  const pressShutter = useCallback(() => {
+    if (recordingRef.current) {
+      cameraRef.current?.stopRecording();
+      return;
+    }
+    if (stage !== 'idle') return;
+    if (mode === 'video') void runRecording();
+    else void capturePair();
+  }, [capturePair, mode, runRecording, stage]);
 
-  const shutterGesture = useMemo(
-    () =>
-      Gesture.Exclusive(
-        Gesture.LongPress()
-          .minDuration(HOLD_TO_RECORD_MS)
-          .maxDistance(10000)
-          .onStart(() => runOnJS(beginHold)())
-          .onEnd(() => runOnJS(endHold)()),
-        Gesture.Tap().onEnd(() => runOnJS(takePhoto)())
-      ),
-    [beginHold, endHold, takePhoto]
+  const changeMode = useCallback(
+    (selectedIndex: number) => {
+      if (stage !== 'idle') return;
+      const next = selectedIndex === 1 ? 'video' : 'picture';
+      if (next === mode) return;
+      void Haptics.selectionAsync();
+      setSwitching(true);
+      setMode(next);
+      setTimeout(() => setSwitching(false), 240);
+    },
+    [mode, stage]
   );
 
   const pickFromLibrary = useCallback(async () => {
@@ -437,28 +384,16 @@ export default function CameraScreen() {
       */}
       <View className="absolute inset-0">
         <Screen className="flex-1 justify-between">
-          <View className="flex-row items-center justify-end gap-2 px-5 pt-2">
-            {/* Labelled, because a bare icon does not say whether it is the
-                current state or the action it would take. */}
-            <Text className="text-sm text-ink">
-              {flash === 'off' ? 'Blits av' : 'Blits auto'}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={flash === 'off' ? 'Slå på blits' : 'Slå av blits'}
+          <View className="items-end px-5 pt-2">
+            <NativeCameraButton
+              label={flash === 'off' ? 'Slå på automatisk blits' : 'Slå av blits'}
+              systemImage={flash === 'off' ? 'bolt.slash.fill' : 'bolt.badge.a'}
+              active={flash !== 'off'}
               onPress={() => {
                 void Haptics.selectionAsync();
                 setFlash((current) => (current === 'off' ? 'auto' : 'off'));
               }}
-              hitSlop={8}
-              className="h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
-              <SymbolView
-                name={flash === 'off' ? 'bolt.slash.fill' : 'bolt.fill'}
-                size={26}
-                tintColor="#ffffff"
-                fallback={<Text className="text-2xl text-ink">⚡︎</Text>}
-              />
-            </Pressable>
+            />
           </View>
 
           {/*
@@ -501,173 +436,84 @@ export default function CameraScreen() {
             {/* Lens picker. Only rendered when the device actually reports an
                 ultra-wide, so single-lens iPhones and Android see nothing. */}
             {zoomOptions.length > 1 && !busy ? (
-              <View className="flex-row items-center gap-1 rounded-full bg-overlay p-1">
-                {zoomOptions.map((lens) => {
-                  const selected = lens.id === backLens;
-                  return (
-                    <Pressable
-                      key={lens.label}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={`${lens.label} ganger zoom`}
-                      onPress={() => {
-                        void Haptics.selectionAsync();
-                        setBackLens(lens.id);
-                      }}
-                      className={`h-9 min-w-9 items-center justify-center rounded-full px-3 ${
-                        selected ? 'bg-ink' : ''
-                      }`}>
-                      <Text
-                        className={`text-sm ${selected ? 'text-canvas' : 'text-ink opacity-80'}`}>
-                        {lens.label}×
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+              <SegmentedControl
+                values={zoomOptions.map((lens) => `${lens.label}×`)}
+                selectedIndex={Math.max(
+                  0,
+                  zoomOptions.findIndex((lens) => lens.id === backLens)
+                )}
+                onChange={({ nativeEvent }) => {
+                  const selectedLens = zoomOptions[nativeEvent.selectedSegmentIndex];
+                  if (!selectedLens) return;
+                  void Haptics.selectionAsync();
+                  setBackLens(selectedLens.id);
+                }}
+                accessibilityLabel="Velg kamerazoom"
+                style={{ width: 132, height: 34 }}
+              />
+            ) : null}
+
+            {!busy ? (
+              <SegmentedControl
+                values={['Bilde', 'Video']}
+                selectedIndex={mode === 'picture' ? 0 : 1}
+                onChange={({ nativeEvent }) => changeMode(nativeEvent.selectedSegmentIndex)}
+                accessibilityLabel="Velg bilde eller video"
+                style={{ width: 190, height: 34 }}
+              />
+            ) : null}
+
+            {/* Only transient state needs copy. The shutter and native mode
+                controls already explain the idle camera without an instruction. */}
+            {busy || !ready ? (
+              <View
+                className={`rounded-full px-3 py-1.5 ${recording ? 'bg-alert' : 'bg-overlay'}`}>
+                <Text className="text-sm text-ink">
+                  {recording
+                    ? 'Trykk igjen for å avslutte'
+                    : stage === 'back'
+                      ? 'Tar bildet…'
+                      : stage === 'selfie'
+                        ? 'Selfie om litt…'
+                        : 'Starter kameraet…'}
+                </Text>
               </View>
             ) : null}
 
-            {/* On a pill, because this sits over the live preview: grey text
-                on whatever the camera happens to be pointed at is legible
-                against a dark room and invisible against a bright sky. */}
-            <View
-              className={`rounded-full px-3 py-1.5 ${recording ? 'bg-alert' : 'bg-overlay'}`}>
-              <Text className={`text-sm ${busy ? 'text-ink' : 'text-ink opacity-80'}`}>
-                {recording
-                  ? 'Slipp for å avslutte'
-                  : stage === 'back'
-                    ? 'Tar bildet…'
-                    : stage === 'selfie'
-                      ? 'Selfie om litt…'
-                      : ready
-                        ? 'Ett trykk tar bildet · hold for video'
-                        : 'Starter kameraet…'}
-              </Text>
-            </View>
-
             {error ? (
-              <Text className="px-8 text-center text-sm text-alert">{error}</Text>
+              <View className="w-full px-8">
+                <ErrorNotice message={error} />
+              </View>
             ) : null}
 
             <View className="w-full flex-row items-center justify-around px-10">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Velg fra kamerarullen"
+              <NativeCameraButton
+                label="Velg fra kamerarullen"
+                systemImage="photo.on.rectangle"
                 disabled={busy}
-                onPress={pickFromLibrary}
-                hitSlop={10}
-                className="h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
-                <SymbolView
-                  name="photo.on.rectangle"
-                  size={26}
-                  tintColor="#ffffff"
-                  fallback={<Text className="text-2xl text-ink">▤</Text>}
-                />
-              </Pressable>
+                onPress={() => void pickFromLibrary()}
+              />
 
-              <GestureDetector gesture={shutterGesture}>
-                <View
-                  accessibilityRole="button"
-                  accessibilityLabel="Ta bilde, eller hold for video"
-                  className="h-20 w-20 items-center justify-center rounded-full">
-                {/* The ring sits outside the button's own edge, so the border
-                    stays put and only the progress arc moves. */}
-                <View className="absolute inset-0 items-center justify-center">
-                  <ShutterRing
-                    size={80}
-                    stroke={4}
-                    progress={recording ? Math.min(elapsed / MAX_VIDEO_SECONDS, 1) : 0}
-                    recording={recording}
-                  />
-                </View>
+              <NativeShutterButton
+                mode={mode}
+                recording={recording}
+                busy={busy || !ready}
+                onPress={pressShutter}
+              />
 
-                  {busy && !recording ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : recording ? (
-                    // A square, the way every camera signals "recording".
-                    <View className="h-9 w-9 rounded-lg bg-alert" />
-                  ) : (
-                    <View className="h-16 w-16 rounded-full bg-ink" />
-                  )}
-                </View>
-              </GestureDetector>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Bytt kamera"
+              <NativeCameraButton
+                label="Bytt kamera"
+                systemImage="arrow.triangle.2.circlepath.camera.fill"
                 disabled={busy}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   setFacing((current) => (current === 'back' ? 'front' : 'back'));
                 }}
-                hitSlop={10}
-                className="h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong">
-                <SymbolView
-                  name="arrow.triangle.2.circlepath.camera.fill"
-                  size={26}
-                  tintColor="#ffffff"
-                  fallback={<Text className="text-2xl text-ink">⟳</Text>}
-                />
-              </Pressable>
+              />
             </View>
           </View>
         </Screen>
       </View>
     </View>
-  );
-}
-
-/**
- * The shutter's outline, doubling as the recording countdown.
- *
- * A ring rather than a number: the ten seconds are a limit to feel, not a
- * figure to read, and nobody watching their own framing wants to also parse
- * "6,3 s igjen". Drawn as a stroked circle with a dash gap the length of the
- * remaining arc, which is how every progress ring is built — the alternative,
- * clipped rotating half-circles, needs no dependency but is far harder to get
- * right at the seam.
- */
-function ShutterRing({
-  size,
-  stroke,
-  progress,
-  recording,
-}: {
-  size: number;
-  stroke: number;
-  progress: number;
-  recording: boolean;
-}) {
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-
-  return (
-    <Svg width={size} height={size}>
-      <Circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke="#ffffff"
-        strokeWidth={stroke}
-        fill="none"
-        // Dimmed while recording so the red arc reads against it.
-        opacity={recording ? 0.3 : 1}
-      />
-      {recording ? (
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#ff3b30"
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - progress)}
-          // Starts at twelve o'clock instead of three, where a stroke begins.
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      ) : null}
-    </Svg>
   );
 }
