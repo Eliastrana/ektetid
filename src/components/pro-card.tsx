@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import {
   ErrorCode,
   finishTransaction as finishIapTransaction,
+  getAvailablePurchases,
   useIAP,
   type Purchase,
   type UseIAPOptions,
@@ -14,8 +15,11 @@ import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native
 import { ErrorNotice } from '@/components/error-notice';
 import {
   fetchProProgress,
+  isTerminal,
   PRO_PRODUCT_ID,
+  ProPurchaseError,
   verifyProPurchase,
+  type ProFailureReason,
   type ProProgress,
 } from '@/lib/pro';
 
@@ -51,6 +55,24 @@ function purchaseErrorMessage(error: unknown): string {
       return 'Pro-produktet er ikke tilgjengelig i butikken ennå.';
     default:
       return 'Butikken kunne ikke fullføre kjøpet. Prøv igjen om litt.';
+  }
+}
+
+function verifyErrorMessage(reason: ProFailureReason | null): string {
+  switch (reason) {
+    case 'account_mismatch':
+      return 'Dette kjøpet tilhører en annen EkteTid-konto. Logg inn med kontoen du kjøpte Pro med.';
+    case 'already_claimed':
+      return 'Kjøpet er allerede brukt på en annen EkteTid-konto.';
+    case 'revoked':
+      return 'Apple har refundert dette kjøpet, så Pro er ikke lenger aktivt.';
+    case 'product_mismatch':
+    case 'invalid_receipt':
+      return 'Butikken returnerte ikke en gyldig Pro-kvittering.';
+    case 'not_configured':
+      return 'Kjøp kan ikke bekreftes akkurat nå. Prøv igjen senere.';
+    default:
+      return 'Fikk ikke bekreftet kjøpet. Sjekk nettet og prøv Gjenopprett kjøp.';
   }
 }
 
@@ -91,8 +113,16 @@ export function ProCard({
         await finishIapTransaction({ purchase, isConsumable: false });
         await refresh();
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch {
-        setError('Kjøpet ble registrert, men kunne ikke bekreftes. Prøv Gjenopprett kjøp.');
+      } catch (verifyError) {
+        const reason =
+          verifyError instanceof ProPurchaseError ? verifyError.reason : null;
+        setError(verifyErrorMessage(reason));
+        // A receipt the store will never accept for this account has to be
+        // finished anyway. StoreKit re-delivers unfinished transactions on every
+        // launch, so leaving it open shows this error forever.
+        if (isTerminal(reason)) {
+          await finishIapTransaction({ purchase, isConsumable: false }).catch(() => {});
+        }
       } finally {
         setBusy(false);
       }
@@ -124,6 +154,46 @@ export function ProCard({
       setError(purchaseErrorMessage(storeError));
     },
   });
+
+  /**
+   * Restore has to verify the purchase itself: `restorePurchases` queries the
+   * store with `alsoPublishToEventListenerIOS: false`, so it never reaches
+   * `onPurchaseSuccess` and would otherwise drop the receipt on the floor.
+   *
+   * Entitlements are read first because that needs no round trip and no
+   * credentials. `restorePurchases` wraps `AppStore.sync()`, which prompts for
+   * an App Store password and rejects when it is dismissed — so it is a
+   * fallback for when nothing is held locally, and its failure must never
+   * outrank a receipt we can already see.
+   */
+  const findProPurchase = useCallback(
+    async () =>
+      (await getAvailablePurchases()).find((item) => item.productId === PRO_PRODUCT_ID),
+    []
+  );
+
+  const restore = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    let proPurchase: Purchase | undefined;
+    try {
+      proPurchase = await findProPurchase();
+      if (!proPurchase) {
+        await restorePurchases().catch(() => {});
+        proPurchase = await findProPurchase();
+      }
+    } catch {
+      setBusy(false);
+      setError('Klarte ikke å hente kjøpene dine fra App Store.');
+      return;
+    }
+    setBusy(false);
+    if (!proPurchase) {
+      setError('Fant ingen kjøp å gjenopprette.');
+      return;
+    }
+    await finishVerified(proPurchase);
+  }, [findProPurchase, finishVerified, restorePurchases]);
 
   useEffect(() => {
     void refresh().catch(() => setError('Klarte ikke å hente Pro-status.'));
@@ -271,12 +341,7 @@ export function ProCard({
           <Pressable
             accessibilityRole="button"
             disabled={!connected || busy}
-            onPress={() => {
-              setBusy(true);
-              void restorePurchases()
-                .catch(() => setError('Fant ingen kjøp å gjenopprette.'))
-                .finally(() => setBusy(false));
-            }}>
+            onPress={() => void restore()}>
             <Text className="pt-3 text-center text-xs text-muted">Gjenopprett kjøp</Text>
           </Pressable>
         </>
