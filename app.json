@@ -167,7 +167,8 @@
           "groupIdentifier": "group.com.eliastrana.ektetid"
         }
       ],
-      "expo-iap"
+      "expo-iap",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
