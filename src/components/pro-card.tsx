@@ -19,7 +19,6 @@ import {
   PRO_PRODUCT_ID,
   ProPurchaseError,
   verifyProPurchase,
-  type ProFailureReason,
   type ProProgress,
 } from '@/lib/pro';
 
@@ -58,8 +57,9 @@ function purchaseErrorMessage(error: unknown): string {
   }
 }
 
-function verifyErrorMessage(reason: ProFailureReason | null): string {
-  switch (reason) {
+function verifyErrorMessage(error: unknown): string {
+  const failure = error instanceof ProPurchaseError ? error : null;
+  switch (failure?.reason ?? null) {
     case 'account_mismatch':
       return 'Dette kjøpet tilhører en annen EkteTid-konto. Logg inn med kontoen du kjøpte Pro med.';
     case 'already_claimed':
@@ -72,7 +72,11 @@ function verifyErrorMessage(reason: ProFailureReason | null): string {
     case 'not_configured':
       return 'Kjøp kan ikke bekreftes akkurat nå. Prøv igjen senere.';
     default:
-      return 'Fikk ikke bekreftet kjøpet. Sjekk nettet og prøv Gjenopprett kjøp.';
+      // No verdict came back. Name what actually happened, so a server refusal
+      // is never mistaken for a dead network — the two need different fixes.
+      return failure?.status
+        ? `Fikk ikke bekreftet kjøpet (feil ${failure.status}). Prøv Gjenopprett kjøp.`
+        : 'Fikk ikke kontakt med EkteTid for å bekrefte kjøpet. Sjekk nettet og prøv igjen.';
   }
 }
 
@@ -110,19 +114,28 @@ export function ProCard({
       setError(null);
       try {
         await verifyProPurchase(purchase);
-        await finishIapTransaction({ purchase, isConsumable: false });
-        await refresh();
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (verifyError) {
-        const reason =
-          verifyError instanceof ProPurchaseError ? verifyError.reason : null;
-        setError(verifyErrorMessage(reason));
-        // A receipt the store will never accept for this account has to be
-        // finished anyway. StoreKit re-delivers unfinished transactions on every
-        // launch, so leaving it open shows this error forever.
+        setError(verifyErrorMessage(verifyError));
+        // A receipt the store will never accept for this account still has to be
+        // finished. StoreKit re-delivers unfinished transactions on every launch,
+        // so leaving it open shows this error forever.
+        const reason = verifyError instanceof ProPurchaseError ? verifyError.reason : null;
         if (isTerminal(reason)) {
           await finishIapTransaction({ purchase, isConsumable: false }).catch(() => {});
         }
+        setBusy(false);
+        return;
+      }
+
+      // Verified: Pro is granted server-side from here on. Nothing below may
+      // report a failed purchase, or a hiccup finishing the transaction would
+      // tell the buyer their money bought nothing.
+      await finishIapTransaction({ purchase, isConsumable: false }).catch(() => {});
+      try {
+        await refresh();
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        setError('Pro er aktivert, men statusen ble ikke oppdatert. Start appen på nytt.');
       } finally {
         setBusy(false);
       }

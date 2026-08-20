@@ -44,8 +44,11 @@ export type ProFailureReason =
   | 'revoked';
 
 export class ProPurchaseError extends Error {
-  constructor(readonly reason: ProFailureReason | null) {
-    super(reason ?? 'unreachable');
+  constructor(
+    readonly reason: ProFailureReason | null,
+    readonly status: number | null = null
+  ) {
+    super(reason ?? `http:${status ?? 'unreachable'}`);
   }
 }
 
@@ -59,14 +62,37 @@ export function isTerminal(reason: ProFailureReason | null): boolean {
   );
 }
 
-async function readFailureReason(error: unknown): Promise<ProFailureReason | null> {
-  const context = (error as { context?: unknown }).context;
-  if (!(context instanceof Response)) return null;
+type ResponseLike = {
+  status?: number;
+  clone?: () => ResponseLike;
+  json?: () => Promise<unknown>;
+};
+
+/**
+ * Pull the server's verdict out of a functions.invoke failure.
+ *
+ * The response is duck-typed rather than tested with `instanceof Response`:
+ * under Hermes the fetch polyfill's Response is not dependably the same
+ * constructor the app holds, and a false negative would throw away the reason
+ * and report every refusal as a network problem. The status is kept either way
+ * so a reasonless failure can still say something concrete.
+ */
+async function readFailure(
+  error: unknown
+): Promise<{ reason: ProFailureReason | null; status: number | null }> {
+  const context = (error as { context?: ResponseLike }).context;
+  const status = typeof context?.status === 'number' ? context.status : null;
+  if (typeof context?.json !== 'function') return { reason: null, status };
   try {
-    const body = (await context.clone().json()) as { reason?: unknown };
-    return typeof body.reason === 'string' ? (body.reason as ProFailureReason) : null;
+    const source = typeof context.clone === 'function' ? context.clone() : context;
+    const body = (await source.json?.()) as { reason?: unknown } | undefined;
+    const reason = body?.reason;
+    return {
+      reason: typeof reason === 'string' ? (reason as ProFailureReason) : null,
+      status,
+    };
   } catch {
-    return null;
+    return { reason: null, status };
   }
 }
 
@@ -82,5 +108,8 @@ export async function verifyProPurchase(purchase: Purchase): Promise<void> {
       purchaseToken: purchase.purchaseToken,
     },
   });
-  if (error) throw new ProPurchaseError(await readFailureReason(error));
+  if (error) {
+    const { reason, status } = await readFailure(error);
+    throw new ProPurchaseError(reason, status);
+  }
 }
