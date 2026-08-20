@@ -14,9 +14,11 @@
  * Apple is at least as strong — the answer arrives over TLS from an endpoint we
  * authenticate to with a private key, so a client cannot forge or replay one.
  *
- * The transaction is bound to the authenticated Supabase UUID through
- * appAccountToken, and Android through obfuscatedExternalAccountId, so a
- * purchase cannot be moved onto another EkteTid account.
+ * A purchase is owned by the store account that made it, and grants Pro to
+ * whichever EkteTid account claims it — Apple cannot sell the same
+ * non-consumable twice, so binding it to the account that happened to be signed
+ * in at purchase time stranded anyone who later switched. Claiming moves the
+ * entitlement rather than copying it, so one purchase is always one Pro.
  */
 
 import { GoogleAuth } from 'npm:google-auth-library@10';
@@ -86,25 +88,21 @@ Deno.serve(async (req) => {
   try {
     const transactionId =
       body.platform === 'ios'
-        ? await verifyApple(body.purchaseToken, user.id)
-        : await verifyGoogle(body.purchaseToken, user.id);
+        ? await verifyApple(body.purchaseToken)
+        : await verifyGoogle(body.purchaseToken);
 
     const admin = createClient(url, serviceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { error } = await admin.from('pro_entitlements').upsert(
-      {
-        user_id: user.id,
-        source: 'purchase',
-        transaction_id: transactionId,
-      },
-      { onConflict: 'user_id' }
-    );
+    // Moves the entitlement off any account that held it before, so one
+    // purchase keeps granting exactly one Pro.
+    const { error } = await admin.rpc('claim_pro_entitlement', {
+      p_user_id: user.id,
+      p_transaction_id: transactionId,
+    });
     if (error) {
-      return json(
-        { error: 'Purchase already belongs to another account', reason: 'already_claimed' },
-        409
-      );
+      console.error('Could not record the entitlement', error);
+      return json({ error: 'Could not record the purchase', reason: 'already_claimed' }, 409);
     }
 
     return json({ pro: true });
@@ -177,7 +175,7 @@ function base64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function verifyApple(jws: string, userId: string): Promise<string> {
+async function verifyApple(jws: string): Promise<string> {
   // The device's JWS is read only to learn which transaction to ask about. None
   // of it is trusted: every field checked below comes back from Apple.
   const claimed = decodeJwsPayload(jws);
@@ -230,20 +228,14 @@ async function verifyApple(jws: string, userId: string): Promise<string> {
   if (transaction.revocationDate) {
     throw new VerificationError('revoked', 'Apple revoked this purchase');
   }
-  const appAccountToken = transaction.appAccountToken;
-  if (
-    typeof appAccountToken !== 'string' ||
-    appAccountToken.toLowerCase() !== userId.toLowerCase()
-  ) {
-    throw new VerificationError(
-      'account_mismatch',
-      'Receipt was bought by a different EkteTid account'
-    );
-  }
-  if (typeof transaction.transactionId !== 'string') {
+  // Keyed on the original transaction id, not the current one: Apple issues a
+  // fresh transactionId each time it re-delivers an owned non-consumable, and
+  // those must all resolve to the one entitlement rather than piling up.
+  const originalId = transaction.originalTransactionId ?? transaction.transactionId;
+  if (typeof originalId !== 'string') {
     throw new VerificationError('invalid_receipt', 'Missing transaction id');
   }
-  return `apple:${transaction.transactionId}`;
+  return `apple:${originalId}`;
 }
 
 function decodeJwsPayload(jws: string): Record<string, unknown> {
@@ -255,12 +247,11 @@ function decodeJwsPayload(jws: string): Record<string, unknown> {
 
 type GooglePurchase = {
   acknowledgementState?: number;
-  obfuscatedExternalAccountId?: string;
   orderId?: string;
   purchaseState?: number;
 };
 
-async function verifyGoogle(token: string, userId: string): Promise<string> {
+async function verifyGoogle(token: string): Promise<string> {
   const rawCredentials = Deno.env.get('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON');
   if (!rawCredentials) {
     throw new VerificationError('not_configured', 'Google Play credentials are missing');
@@ -279,12 +270,6 @@ async function verifyGoogle(token: string, userId: string): Promise<string> {
 
   if (purchase.purchaseState !== 0) {
     throw new VerificationError('invalid_receipt', 'Google purchase is not complete');
-  }
-  if (purchase.obfuscatedExternalAccountId?.toLowerCase() !== userId.toLowerCase()) {
-    throw new VerificationError(
-      'account_mismatch',
-      'Purchase was bought by a different EkteTid account'
-    );
   }
   return `google:${purchase.orderId ?? token}`;
 }
