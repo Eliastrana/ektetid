@@ -2,79 +2,29 @@
  * Verify a non-consumable Pro purchase with the platform before granting it.
  *
  * Required production secrets:
- * - APPLE_APP_ID (numeric App Store app id; Apple only)
+ * - APPLE_IAP_KEY_ID, APPLE_IAP_ISSUER_ID, APPLE_IAP_PRIVATE_KEY
+ *   (App Store Connect In-App Purchase key; Apple only)
  * - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (Play Console service account; Android only)
  *
- * The Apple JWS is checked against Apple's root certificates and bound to both
- * this bundle and the authenticated Supabase UUID supplied as appAccountToken.
- * Android is checked through the Google Play Developer API and the same UUID is
- * required as obfuscatedExternalAccountId. A store transaction can therefore
- * neither be forged by the client nor replayed onto another EkteTid account.
+ * Apple receipts are confirmed by asking the App Store Server API about the
+ * transaction id directly, rather than validating the device's JWS locally.
+ * Apple's own verification library cannot run here: it needs X509Certificate's
+ * `verify`, `raw` and `toString`, none of which this runtime implements, so
+ * chain validation always threw before a signature was ever checked. Asking
+ * Apple is at least as strong — the answer arrives over TLS from an endpoint we
+ * authenticate to with a private key, so a client cannot forge or replay one.
+ *
+ * The transaction is bound to the authenticated Supabase UUID through
+ * appAccountToken, and Android through obfuscatedExternalAccountId, so a
+ * purchase cannot be moved onto another EkteTid account.
  */
 
-import {
-  Environment,
-  SignedDataVerifier,
-} from 'npm:@apple/app-store-server-library@3';
 import { GoogleAuth } from 'npm:google-auth-library@10';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { Buffer } from 'node:buffer';
 
 const PRODUCT_ID = 'com.eliastrana.ektetid.pro';
 const BUNDLE_ID = 'com.eliastrana.ektetid';
 const ANDROID_PACKAGE = 'com.eliastrana.ektetid';
-
-/**
- * Apple's root certificates, as base64 DER.
- *
- * These are inlined rather than read from disk on purpose: Supabase uploads
- * only a function's module graph, so a sibling .cer is silently dropped at
- * deploy time and every verification then fails at runtime. Both roots are
- * public and valid until 2039.
- */
-const APPLE_ROOT_CAS = [
-  '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' +
-  'F+E=',
-  'MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwSQXBw' +
-  'bGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhv' +
-  'cml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcNMTQwNDMwMTgx' +
-  'OTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBSb290IENBIC0gRzMx' +
-  'JjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApB' +
-  'cHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABJjpLz1A' +
-  'cqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtfTjjTuxxEtX/1H7YyYl3J6YRbTzBP' +
-  'EVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0O' +
-  'BBYEFLuw3qFYM4iapIqZ3r6966/ayySrMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/' +
-  'BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+yRhHF' +
-  'D/3meoyhpmvOwgPUnPWTxnS4at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2Qf' +
-  'yFMm+YhidDkLF1vLUagM6BgD56KyKA==',
-];
 
 /**
  * Why a verification failed. Safe to hand back to the client: it says which
@@ -166,29 +116,113 @@ Deno.serve(async (req) => {
   }
 });
 
-async function verifyApple(jws: string, userId: string): Promise<string> {
-  const unsigned = decodeJwsPayload(jws);
-  const production = unsigned.environment === 'Production';
-  const environment = production ? Environment.PRODUCTION : Environment.SANDBOX;
-  const appAppleId = production ? Number(Deno.env.get('APPLE_APP_ID')) : undefined;
-  if (production && !Number.isFinite(appAppleId)) {
-    throw new VerificationError('not_configured', 'APPLE_APP_ID is missing');
+/** Apple's transaction lookup, production first — sandbox powers TestFlight. */
+const APPLE_HOSTS = [
+  'https://api.storekit.itunes.apple.com',
+  'https://api.storekit-sandbox.itunes.apple.com',
+];
+
+/**
+ * Sign the ES256 assertion the App Store Server API authenticates us with.
+ * WebCrypto covers this natively, which is the whole reason this path works
+ * here when the certificate-chain one does not.
+ */
+async function appleApiToken(): Promise<string> {
+  const keyId = Deno.env.get('APPLE_IAP_KEY_ID');
+  const issuerId = Deno.env.get('APPLE_IAP_ISSUER_ID');
+  const privateKey = Deno.env.get('APPLE_IAP_PRIVATE_KEY');
+  if (!keyId || !issuerId || !privateKey) {
+    throw new VerificationError('not_configured', 'App Store Connect key is missing');
   }
 
-  const roots = APPLE_ROOT_CAS.map((cert) => Buffer.from(cert, 'base64'));
-  const verifier = new SignedDataVerifier(
-    roots,
-    true,
-    environment,
-    BUNDLE_ID,
-    appAppleId
+  const pkcs8 = Uint8Array.from(
+    atob(privateKey.replace(/-----[^-]+-----/g, '').replace(/\s/g, '')),
+    (character) => character.charCodeAt(0)
   );
-  let transaction;
-  try {
-    transaction = await verifier.verifyAndDecodeTransaction(jws);
-  } catch (error) {
-    throw new VerificationError('invalid_receipt', `Apple rejected the receipt: ${error}`);
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pkcs8,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+
+  const now = Math.floor(Date.now() / 1000);
+  const encoder = new TextEncoder();
+  const header = base64Url(encoder.encode(JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' })));
+  const claims = base64Url(
+    encoder.encode(
+      JSON.stringify({
+        iss: issuerId,
+        iat: now,
+        exp: now + 600,
+        aud: 'appstoreconnect-v1',
+        bid: BUNDLE_ID,
+      })
+    )
+  );
+  const signature = new Uint8Array(
+    await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      key,
+      encoder.encode(`${header}.${claims}`)
+    )
+  );
+  return `${header}.${claims}.${base64Url(signature)}`;
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function verifyApple(jws: string, userId: string): Promise<string> {
+  // The device's JWS is read only to learn which transaction to ask about. None
+  // of it is trusted: every field checked below comes back from Apple.
+  const claimed = decodeJwsPayload(jws);
+  const transactionId = claimed.transactionId;
+  if (typeof transactionId !== 'string' || !transactionId) {
+    throw new VerificationError('invalid_receipt', 'Receipt carries no transaction id');
   }
+
+  const token = await appleApiToken();
+  let signedTransaction: string | undefined;
+  let notFound = false;
+
+  for (const host of APPLE_HOSTS) {
+    const response = await fetch(
+      `${host}/inApps/v1/transactions/${encodeURIComponent(transactionId)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (response.status === 404) {
+      notFound = true;
+      continue;
+    }
+    if (!response.ok) {
+      throw new VerificationError(
+        'invalid_receipt',
+        `App Store Server API returned ${response.status}: ${await response.text()}`
+      );
+    }
+    const body = (await response.json()) as { signedTransactionInfo?: string };
+    if (!body.signedTransactionInfo) {
+      throw new VerificationError('invalid_receipt', 'Apple returned no transaction info');
+    }
+    signedTransaction = body.signedTransactionInfo;
+    break;
+  }
+
+  if (!signedTransaction) {
+    throw new VerificationError(
+      'invalid_receipt',
+      notFound ? 'Apple does not know this transaction' : 'Apple did not return the transaction'
+    );
+  }
+
+  // Safe to read without checking the signature: this came from Apple over TLS,
+  // on a request they authenticated, in answer to the id we asked about.
+  const transaction = decodeJwsPayload(signedTransaction);
 
   if (transaction.productId !== PRODUCT_ID || transaction.bundleId !== BUNDLE_ID) {
     throw new VerificationError('product_mismatch', 'Receipt is for a different product');
@@ -196,15 +230,17 @@ async function verifyApple(jws: string, userId: string): Promise<string> {
   if (transaction.revocationDate) {
     throw new VerificationError('revoked', 'Apple revoked this purchase');
   }
-  // Apple lower-cases the token it echoes back; Postgres UUIDs are already
-  // lower-case, but compare defensively so casing can never reject a valid buyer.
-  if (transaction.appAccountToken?.toLowerCase() !== userId.toLowerCase()) {
+  const appAccountToken = transaction.appAccountToken;
+  if (
+    typeof appAccountToken !== 'string' ||
+    appAccountToken.toLowerCase() !== userId.toLowerCase()
+  ) {
     throw new VerificationError(
       'account_mismatch',
       'Receipt was bought by a different EkteTid account'
     );
   }
-  if (!transaction.transactionId) {
+  if (typeof transaction.transactionId !== 'string') {
     throw new VerificationError('invalid_receipt', 'Missing transaction id');
   }
   return `apple:${transaction.transactionId}`;
