@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { AppleMaps } from 'expo-maps';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, withTiming } from 'react-native-reanimated';
 
@@ -9,11 +9,14 @@ import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { Segmented } from '@/components/segmented';
 import {
+  clusterPosts,
   fetchLocatedPosts,
   hydrateLocatedPostImages,
+  postsInView,
   regionFor,
   type LocatedPost,
   type MapFilter,
+  type MapRegion,
 } from '@/lib/map';
 import { PinFactory } from '@/components/pin-factory';
 import type { ImageRef } from 'expo-image';
@@ -81,6 +84,13 @@ function cardExit() {
   };
 }
 
+/**
+ * Span below which zooming no longer separates a cluster. `regionFor` floors
+ * its own result at MIN_DELTA, so anything at or under that is as tight as the
+ * camera will go.
+ */
+const MIN_CLUSTER_SPAN = 0.02;
+
 export default function MapScreen() {
   const router = useRouter();
   const viewport = useWindowDimensions();
@@ -91,10 +101,22 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [icons, setIcons] = useState<Map<string, ImageRef>>(new Map());
+  /** Where the camera actually is, once the user has moved it. */
+  const [camera, setCamera] = useState<MapRegion | null>(null);
+  /**
+   * Where the app wants the camera. Kept apart from `camera`: driving the
+   * position prop from the observed position feeds moves back into the map
+   * and fights the gesture.
+   */
+  const [target, setTarget] = useState<MapRegion | null>(null);
   const loadToken = useRef(0);
+  const cameraSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Thumbnail paths already asked for, so a failed signing is not retried forever. */
+  const attemptedPaths = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const token = ++loadToken.current;
+    attemptedPaths.current = new Set();
     const cacheKey = mapCacheKey(filter, selfId);
     const cached = mapCache.get(cacheKey);
 
@@ -117,7 +139,13 @@ export default function MapScreen() {
       setLoading(false);
       // Coordinates and fallback pins are interactive now. Photo icons replace
       // them progressively once the signed thumbnail URLs arrive.
-      void hydrateLocatedPostImages(immediate)
+      const opening = regionFor(immediate);
+      const firstWanted = opening
+        ? clusterPosts(postsInView(immediate, opening), opening)
+            .filter((cluster) => cluster.posts.length === 1)
+            .map((cluster) => cluster.posts[0])
+        : [];
+      void hydrateLocatedPostImages(immediate, firstWanted)
         .then((hydrated) => {
           if (token !== loadToken.current) return;
           mapCache.set(cacheKey, hydrated);
@@ -142,6 +170,119 @@ export default function MapScreen() {
   );
 
   const region = useMemo(() => regionFor(posts), [posts]);
+
+  /**
+   * What the camera is looking at: its live position once moved, otherwise the
+   * opening fit. Clustering keys off this, so bubbles regroup as it changes.
+   */
+  const view = camera ?? region;
+
+  /**
+   * Grid clusters for the current span. Only posts near the camera take part,
+   * so a country's worth of pins off screen costs nothing.
+   */
+  const clusters = useMemo(
+    () => (view ? clusterPosts(postsInView(posts, view), view) : []),
+    [posts, view]
+  );
+
+  /** Cells holding one post: these get a photo. */
+  const singles = useMemo(
+    () => clusters.filter((cluster) => cluster.posts.length === 1).map((c) => c.posts[0]),
+    [clusters]
+  );
+
+  /** Cells holding several: these get a count. */
+  const groups = useMemo(
+    () => clusters.filter((cluster) => cluster.posts.length > 1),
+    [clusters]
+  );
+
+  // Sign thumbnails for what is on screen now. Panning somewhere new fetches
+  // that place's photos rather than leaving them as fallback glyphs forever.
+  //
+  // Paths are remembered whether or not they resolved. A post whose signing
+  // fails keeps a null imageUrl, so asking "is anything still unsigned?" would
+  // stay true forever — and since each pass hands back a fresh array, the
+  // effect would re-run on its own output and retry that path without end.
+  useEffect(() => {
+    const pending = singles.filter(
+      (post) => !post.imageUrl && !attemptedPaths.current.has(post.imagePath)
+    );
+    if (pending.length === 0) return;
+
+    for (const post of pending) attemptedPaths.current.add(post.imagePath);
+
+    const token = loadToken.current;
+    void hydrateLocatedPostImages(posts, pending)
+      .then((hydrated) => {
+        if (token !== loadToken.current) return;
+        mapCache.set(mapCacheKey(filter, selfId), hydrated);
+        setPosts(hydrated);
+      })
+      .catch(() => {});
+  }, [filter, posts, selfId, singles]);
+
+  /**
+   * Camera moves arrive continuously while panning. Clustering every frame
+   * would rebuild the annotation list mid-gesture, so the region is taken once
+   * the movement settles.
+   */
+  const onCameraMove = useCallback((event: {
+    coordinates?: { latitude?: number; longitude?: number };
+    latitudeDelta?: number;
+    longitudeDelta?: number;
+  }) => {
+    const { latitude, longitude } = event.coordinates ?? {};
+    const { latitudeDelta, longitudeDelta } = event;
+    if (
+      latitude == null ||
+      longitude == null ||
+      latitudeDelta == null ||
+      longitudeDelta == null
+    ) {
+      return;
+    }
+
+    if (cameraSettle.current) clearTimeout(cameraSettle.current);
+    cameraSettle.current = setTimeout(() => {
+      cameraSettle.current = null;
+      setCamera({ latitude, longitude, latitudeDelta, longitudeDelta });
+    }, 220);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (cameraSettle.current) clearTimeout(cameraSettle.current);
+    },
+    []
+  );
+
+  /**
+   * Dive into a bubble: tighten the camera onto its members so the grid splits
+   * them on the next pass.
+   *
+   * Posts stacked on one spot never separate however far the camera goes, so
+   * once the span is small enough that zooming has stopped helping, the tap
+   * opens the newest of them instead of leaving a bubble that does nothing.
+   */
+  const openCluster = useCallback(
+    (id: string) => {
+      const cluster = groups.find((candidate) => candidate.id === id);
+      if (!cluster) return;
+
+      const next = regionFor(cluster.posts);
+      if (!next) return;
+
+      const tight = next.latitudeDelta <= MIN_CLUSTER_SPAN;
+      if (tight) {
+        setSelectedId(cluster.posts[0].id);
+        return;
+      }
+      setTarget(next);
+    },
+    [groups]
+  );
   const selected = useMemo(
     () => (selectedId ? (posts.find((post) => post.id === selectedId) ?? null) : null),
     [posts, selectedId]
@@ -152,8 +293,19 @@ export default function MapScreen() {
    * that accepts a decoded custom ImageRef.
    */
   const annotations = useMemo(
-    () =>
-      posts.flatMap((post) => {
+    () => [
+      // A cell holding several posts is drawn as its count. Annotations take
+      // text and a background directly, so a bubble needs no captured image —
+      // which is also why zooming out stays cheap however dense the map gets.
+      ...groups.map((cluster) => ({
+        id: `cluster:${cluster.id}`,
+        coordinates: { latitude: cluster.latitude, longitude: cluster.longitude },
+        title: `${cluster.posts.length} øyeblikk`,
+        text: String(cluster.posts.length),
+        backgroundColor: '#111111',
+        textColor: '#ffffff',
+      })),
+      ...singles.flatMap((post) => {
         const icon = icons.get(post.id);
         if (!icon) return [];
 
@@ -166,7 +318,8 @@ export default function MapScreen() {
           },
         ];
       }),
-    [icons, posts]
+    ],
+    [groups, icons, singles]
   );
 
   /**
@@ -176,7 +329,7 @@ export default function MapScreen() {
    */
   const markers = useMemo(
     () =>
-      posts.flatMap((post) => {
+      singles.flatMap((post) => {
         if (icons.has(post.id)) return [];
 
         return [
@@ -189,7 +342,7 @@ export default function MapScreen() {
           },
         ];
       }),
-    [icons, posts]
+    [icons, singles]
   );
 
   // expo-maps has no map on the simulator and no Apple Maps on Android.
@@ -205,24 +358,33 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <PinFactory posts={posts} onReady={setIcons} />
+      <PinFactory posts={singles} onReady={setIcons} />
 
       {region ? (
         <AppleMaps.View
           style={{ flex: 1 }}
           cameraPosition={{
-            coordinates: { latitude: region.latitude, longitude: region.longitude },
-            zoom: zoomFor(region, viewport),
+            coordinates: {
+              latitude: (target ?? region).latitude,
+              longitude: (target ?? region).longitude,
+            },
+            zoom: zoomFor(target ?? region, viewport),
           }}
           annotations={annotations}
           markers={markers}
+          onCameraMove={onCameraMove}
           uiSettings={{ compassEnabled: false, scaleBarEnabled: false }}
           properties={{ isMyLocationEnabled: true }}
           onMarkerClick={(marker) => {
             setSelectedId(marker.id ?? null);
           }}
           onAnnotationClick={(annotation) => {
-            setSelectedId(annotation.id ?? null);
+            const id = annotation.id ?? null;
+            if (id?.startsWith('cluster:')) {
+              openCluster(id.slice('cluster:'.length));
+              return;
+            }
+            setSelectedId(id);
           }}
         />
       ) : (

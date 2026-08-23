@@ -26,12 +26,87 @@ export type MapRegion = {
 export type MapFilter = 'all' | 'mine';
 
 /**
- * Maximum number of photo-backed map pins.
+ * Safety cap on photo-backed pins rendered at once.
  *
- * Beyond this density the thumbnails overlap, while signing and decoding more
- * media still competes with the native map for bandwidth and main-thread time.
+ * Clustering already keeps this far below its limit — the grid yields at most
+ * CLUSTER_GRID² cells on screen, and only cells holding a single post become
+ * photos. The cap remains for the pathological case of a viewport spanning
+ * nothing but singles.
  */
 export const MAX_MAP_PHOTO_PINS = 30;
+
+/**
+ * Cells across the viewport's shorter axis.
+ *
+ * Cells are measured in degrees of the *current* span, so they shrink as the
+ * camera zooms in: the same two posts that share a cell across a country
+ * separate into their own once the street is on screen. Five reads as a
+ * handful of groups rather than a scattering of near-identical bubbles.
+ */
+const CLUSTER_GRID = 5;
+
+/** One map bubble: a lone post shows its photo, several show a count. */
+export type MapCluster = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  posts: LocatedPost[];
+};
+
+/**
+ * Posts near enough to the camera to be worth drawing.
+ *
+ * The margin keeps pins just off screen ready, so a short pan reveals photos
+ * already signed rather than a row of fallback glyphs. This replaces taking
+ * the first N of the list: ordering by capture date meant the posts that got
+ * images were whichever happened to be most recent, not the ones being
+ * looked at.
+ */
+export function postsInView(
+  posts: LocatedPost[],
+  region: MapRegion,
+  margin = 0.3
+): LocatedPost[] {
+  const latReach = region.latitudeDelta * (0.5 + margin);
+  const lngReach = region.longitudeDelta * (0.5 + margin);
+  return posts.filter(
+    (post) =>
+      Math.abs(post.latitude - region.latitude) <= latReach &&
+      Math.abs(post.longitude - region.longitude) <= lngReach
+  );
+}
+
+/**
+ * Group posts into grid cells for the current span.
+ *
+ * A cluster sits at the mean of its members rather than at its cell's centre,
+ * so a bubble points at where the photos actually are instead of drifting to
+ * arbitrary grid lines as the camera moves.
+ */
+export function clusterPosts(posts: LocatedPost[], region: MapRegion): MapCluster[] {
+  const cellLat = Math.max(region.latitudeDelta, 0.0001) / CLUSTER_GRID;
+  const cellLng = Math.max(region.longitudeDelta, 0.0001) / CLUSTER_GRID;
+
+  const cells = new Map<string, LocatedPost[]>();
+  for (const post of posts) {
+    const key = `${Math.floor(post.latitude / cellLat)}:${Math.floor(post.longitude / cellLng)}`;
+    const bucket = cells.get(key);
+    if (bucket) bucket.push(post);
+    else cells.set(key, [post]);
+  }
+
+  return [...cells.values()].map((members) => {
+    const total = members.length;
+    return {
+      // Identified by a member rather than the cell, so a bubble keeps its
+      // identity across camera moves instead of remounting on every pan.
+      id: members[0].id,
+      latitude: members.reduce((sum, p) => sum + p.latitude, 0) / total,
+      longitude: members.reduce((sum, p) => sum + p.longitude, 0) / total,
+      posts: members,
+    };
+  });
+}
 
 /**
  * Posts with coordinates that the caller can see.
@@ -78,16 +153,24 @@ export async function fetchLocatedPosts(
 }
 
 /**
- * Resolve pin media after coordinates have already mounted the native map.
- * Signing and downloading images is useful decoration, not a prerequisite for
- * panning or selecting fallback camera pins.
+ * Sign thumbnails for `wanted` and fold them into `posts`.
+ *
+ * Signing is decoration, not a prerequisite for panning or selecting fallback
+ * camera pins, so it runs after coordinates have already mounted the map.
+ * Callers pass only the posts currently drawn as photos; anything already
+ * signed is kept, so panning back to a place does not re-sign what it had.
  */
 export async function hydrateLocatedPostImages(
-  posts: LocatedPost[]
+  posts: LocatedPost[],
+  wanted: LocatedPost[]
 ): Promise<LocatedPost[]> {
-  const photoPosts = posts.slice(0, MAX_MAP_PHOTO_PINS);
-  const urls = await signedUrls(photoPosts.map((post) => post.imagePath));
-  return posts.map((post) => ({ ...post, imageUrl: urls.get(post.imagePath) ?? null }));
+  const unsigned = wanted.filter((post) => !post.imageUrl).slice(0, MAX_MAP_PHOTO_PINS);
+  if (unsigned.length === 0) return posts;
+
+  const urls = await signedUrls(unsigned.map((post) => post.imagePath));
+  return posts.map((post) =>
+    post.imageUrl ? post : { ...post, imageUrl: urls.get(post.imagePath) ?? null }
+  );
 }
 
 /** Padding around the outermost pins, as a fraction of their spread. */
