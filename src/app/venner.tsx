@@ -1,10 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/components/auth-provider';
+import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import { ErrorNotice } from '@/components/error-notice';
 import type { Profile } from '@/lib/database.types';
@@ -24,15 +24,6 @@ type Row =
   | { kind: 'friendship'; item: FriendRequest }
   | { kind: 'suggestion'; item: FriendSuggestion }
   | { kind: 'result'; item: Profile };
-
-function Avatar({ url }: { url: string | null }) {
-  if (!url) {
-    return <View className="h-11 w-11 rounded-full bg-surface-raised" />;
-  }
-  return (
-    <Image source={{ uri: url }} style={{ width: 44, height: 44, borderRadius: 22 }} />
-  );
-}
 
 export default function FriendsScreen() {
   const router = useRouter();
@@ -197,7 +188,7 @@ export default function FriendsScreen() {
                   accessibilityLabel={`Se profilen til ${profile.username}`}
                   onPress={() => router.push(`/profil/${profile.id}`)}
                   className="flex-1 flex-row items-center gap-3 active:opacity-70">
-                  <Avatar url={profile.avatar_url} />
+                  <Avatar url={profile.avatar_url} name={profile.display_name ?? profile.username} seed={profile.id} />
                   <View className="flex-1">
                     <Text className="text-base text-ink">
                       {profile.display_name ?? profile.username}

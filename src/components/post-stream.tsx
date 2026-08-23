@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { ErrorNotice } from '@/components/error-notice';
 import { SkeletonBox } from '@/components/skeleton';
 import { fetchPostFeed, type PostFeedItem } from '@/lib/post-feed';
@@ -76,17 +77,13 @@ function PostCard({ item }: { item: PostFeedItem }) {
 
       <View className="gap-2 p-4">
         <View className="flex-row items-center gap-3">
-          <View
-            className="h-10 w-10 overflow-hidden rounded-full bg-glass"
-            style={item.authorHasPro ? { borderWidth: 2, borderColor: '#ffffff' } : undefined}>
-            {item.author.avatar_url ? (
-              <Image source={{ uri: item.author.avatar_url }} contentFit="cover" style={{ flex: 1 }} />
-            ) : (
-              <View className="flex-1 items-center justify-center">
-                <Text className="text-sm text-ink">{authorName.charAt(0).toUpperCase()}</Text>
-              </View>
-            )}
-          </View>
+          <Avatar
+            url={item.author.avatar_url}
+            name={authorName}
+            seed={item.author.id}
+            size={40}
+            ringWidth={item.authorHasPro ? 2 : 0}
+          />
           <View className="flex-1">
             <Text numberOfLines={1} className="text-base text-ink">
               {authorName}

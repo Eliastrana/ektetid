@@ -64,11 +64,6 @@ export default function ProfileScreen() {
     }, [load])
   );
 
-  const initials = (profile?.display_name ?? profile?.username ?? '?')
-    .trim()
-    .charAt(0)
-    .toUpperCase();
-
   return (
     <View className="flex-1 bg-canvas">
       <Screen className="flex-1" edges={['top']}>
@@ -105,7 +100,7 @@ export default function ProfileScreen() {
                   <AvatarPicker
                     userId={userId}
                     avatarUrl={profile?.avatar_url ?? null}
-                    initials={initials}
+                    name={profile?.display_name ?? profile?.username ?? '?'}
                     pro={isPro}
                     onChanged={async () => {
                       await refreshProfile();

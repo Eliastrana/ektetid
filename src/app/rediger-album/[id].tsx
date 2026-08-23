@@ -14,6 +14,7 @@ import { useAuth } from '@/components/auth-provider';
 import { ErrorNotice } from '@/components/error-notice';
 import { NativePostButton } from '@/components/native-post-button';
 import { AlbumGridSkeleton } from '@/components/skeleton';
+import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import {
   addMember,
@@ -428,7 +429,7 @@ export default function EditAlbumScreen() {
                 <View
                   key={member.id}
                   className="mb-2 flex-row items-center gap-3 rounded-tile bg-glass p-3">
-                  <Avatar url={member.avatar_url} name={member.username} />
+                  <Avatar url={member.avatar_url} name={member.username} seed={member.id} size={40} />
                   <Text className="flex-1 text-base text-ink">
                     {member.display_name ?? member.username}
                   </Text>
@@ -473,7 +474,7 @@ export default function EditAlbumScreen() {
                         disabled={busy}
                         onPress={() => confirmInvite(friend)}
                         className="flex-row items-center gap-2 rounded-full bg-glass px-3 py-2 active:bg-glass-strong">
-                        <Avatar url={friend.avatar_url} name={friend.username} small />
+                        <Avatar url={friend.avatar_url} name={friend.username} seed={friend.id} size={22} />
                         <Text className="text-sm text-ink">
                           {friend.display_name ?? friend.username}
                         </Text>
@@ -683,30 +684,6 @@ function PostRow({
           fallback={<Text className="text-muted">≡</Text>}
         />
       </Pressable>
-    </View>
-  );
-}
-
-function Avatar({
-  url,
-  name,
-  small = false,
-}: {
-  url: string | null;
-  name: string;
-  small?: boolean;
-}) {
-  const size = small ? 22 : 40;
-  if (url) {
-    return <Image source={{ uri: url }} style={{ width: size, height: size, borderRadius: size / 2 }} />;
-  }
-  return (
-    <View
-      className="items-center justify-center rounded-full bg-surface-raised"
-      style={{ width: size, height: size }}>
-      <Text className={small ? 'text-[10px] text-ink' : 'text-base text-ink'}>
-        {name.trim().charAt(0).toUpperCase()}
-      </Text>
     </View>
   );
 }

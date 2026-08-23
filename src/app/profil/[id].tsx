@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
@@ -10,6 +9,7 @@ import { ErrorNotice } from '@/components/error-notice';
 import { AlbumGridSkeleton } from '@/components/skeleton';
 import { useAuth } from '@/components/auth-provider';
 import { ReportSheet } from '@/components/report-sheet';
+import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import { errorMessage } from '@/lib/errors';
 import { acceptFriendRequest, removeFriendship, sendFriendRequest } from '@/lib/friends';
@@ -92,7 +92,6 @@ export default function PublicProfileScreen() {
   const { profile, relationship } = data;
   const isFriend = relationship.kind === 'accepted';
   const name = profile.display_name ?? profile.username;
-  const initials = name.trim().charAt(0).toUpperCase();
 
   return (
     <View className="flex-1 bg-canvas">
@@ -124,24 +123,13 @@ export default function PublicProfileScreen() {
               </View>
 
               <View className="mt-4 flex-row items-center gap-4">
-                {profile.avatar_url ? (
-                  <Image
-                    source={{ uri: profile.avatar_url }}
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: 36,
-                      borderWidth: data.isPro ? 2 : 0,
-                      borderColor: data.isPro ? '#ffffff' : 'transparent',
-                    }}
-                  />
-                ) : (
-                  <View
-                    className="h-[72px] w-[72px] items-center justify-center rounded-full bg-glass"
-                    style={data.isPro ? { borderWidth: 2, borderColor: '#ffffff' } : undefined}>
-                    <Text className="text-2xl text-ink">{initials}</Text>
-                  </View>
-                )}
+                <Avatar
+                  url={profile.avatar_url}
+                  name={name}
+                  seed={profile.id}
+                  size={72}
+                  ringWidth={data.isPro ? 2 : 0}
+                />
                 <View className="flex-1">
                   <Text numberOfLines={1} className="text-3xl text-ink">
                     {name}

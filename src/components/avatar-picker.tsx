@@ -1,23 +1,23 @@
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { pickAvatar, removeAvatar, uploadAvatar } from '@/lib/avatar';
 import { errorMessage } from '@/lib/errors';
 
 type Props = {
   userId: string;
   avatarUrl: string | null;
-  /** Initial shown when there is no picture. */
-  initials: string;
+  /** Whose picture it is — the placeholder draws its first letter. */
+  name: string;
   pro?: boolean;
   onChanged: () => void | Promise<void>;
 };
 
 /** Tap to set a profile picture; long-press to remove it. */
-export function AvatarPicker({ userId, avatarUrl, initials, pro = false, onChanged }: Props) {
+export function AvatarPicker({ userId, avatarUrl, name, pro = false, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
 
   async function choose() {
@@ -70,22 +70,21 @@ export function AvatarPicker({ userId, avatarUrl, initials, pro = false, onChang
       onLongPress={confirmRemove}
       disabled={busy}
       className="active:opacity-80">
-      <View
-        className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-glass"
-        style={pro ? { borderWidth: 2, borderColor: '#ffffff' } : undefined}>
-        {busy ? (
+      {busy ? (
+        <View
+          className="h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-glass"
+          style={pro ? { borderWidth: 2, borderColor: '#ffffff' } : undefined}>
           <ActivityIndicator color="#ffffff" />
-        ) : avatarUrl ? (
-          <Image
-            source={{ uri: avatarUrl }}
-            style={{ width: 72, height: 72 }}
-            contentFit="cover"
-            transition={150}
-          />
-        ) : (
-          <Text className="text-2xl text-ink">{initials}</Text>
-        )}
-      </View>
+        </View>
+      ) : (
+        <Avatar
+          url={avatarUrl}
+          name={name}
+          seed={userId}
+          size={72}
+          ringWidth={pro ? 2 : 0}
+        />
+      )}
 
       {!busy ? (
         <View className="absolute -bottom-0.5 -right-0.5 h-6 w-6 items-center justify-center rounded-full border-2 border-canvas bg-ink">

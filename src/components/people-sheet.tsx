@@ -1,9 +1,9 @@
 import SegmentedControl from '@react-native-segmented-control/segmented-control';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { BottomSheet } from '@/components/bottom-sheet';
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
@@ -86,15 +86,11 @@ function PeopleList({ state, mode }: { state: ListState; mode: Mode }) {
       }
       renderItem={({ item }) => (
         <View className="flex-row items-center gap-3 py-2">
-          {item.profile.avatar_url ? (
-            <Image
-              source={{ uri: item.profile.avatar_url }}
-              cachePolicy="memory-disk"
-              style={{ width: 44, height: 44, borderRadius: 22 }}
-            />
-          ) : (
-            <View className="h-11 w-11 rounded-full bg-surface-raised" />
-          )}
+          <Avatar
+            url={item.profile.avatar_url}
+            name={item.profile.display_name ?? item.profile.username}
+            seed={item.profile.id}
+          />
           <View className="flex-1">
             <Text className="text-base text-ink">
               {item.profile.display_name ?? item.profile.username}

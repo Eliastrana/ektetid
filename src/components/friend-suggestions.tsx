@@ -1,10 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@/components/auth-provider';
+import { Avatar } from '@/components/avatar';
 import {
   listFriendSuggestions,
   sendFriendRequest,
@@ -90,14 +90,12 @@ export function FriendSuggestions({ limit = 12 }: { limit?: number }) {
                 accessibilityLabel={`Se profilen til ${item.username}`}
                 onPress={() => router.push(`/profil/${item.id}`)}
                 className="items-center gap-2 active:opacity-70">
-                {item.avatar_url ? (
-                  <Image
-                    source={{ uri: item.avatar_url }}
-                    style={{ width: 56, height: 56, borderRadius: 28 }}
-                  />
-                ) : (
-                  <View className="h-14 w-14 rounded-full bg-surface-raised" />
-                )}
+                <Avatar
+                  url={item.avatar_url}
+                  name={item.display_name ?? item.username}
+                  seed={item.id}
+                  size={56}
+                />
                 <Text numberOfLines={1} className="text-center text-sm text-ink">
                   {item.display_name ?? item.username}
                 </Text>

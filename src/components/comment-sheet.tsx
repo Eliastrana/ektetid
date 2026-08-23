@@ -1,11 +1,11 @@
 import { Host, TextInput as NativeTextInput, useNativeState } from '@expo/ui';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Avatar } from '@/components/avatar';
 import { BottomSheet } from '@/components/bottom-sheet';
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
@@ -204,14 +204,13 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
             <View
               className="flex-row gap-3"
               style={{ marginLeft: item.parent_comment_id ? 32 : 0 }}>
-              {item.author?.avatar_url ? (
-                <Image
-                  source={{ uri: item.author.avatar_url }}
-                  style={{ width: 36, height: 36, borderRadius: 18 }}
-                />
-              ) : (
-                <View className="h-9 w-9 rounded-full bg-surface-raised" />
-              )}
+              {/* Seeded on the username: comment authors are selected without
+                  their id, and a username is stable enough to keep a face. */}
+              <Avatar
+                url={item.author?.avatar_url}
+                name={item.author?.username ?? ''}
+                size={36}
+              />
               <View className="flex-1">
                 <View className="flex-row items-center gap-2">
                   <Text className="text-sm text-ink">@{item.author?.username}</Text>

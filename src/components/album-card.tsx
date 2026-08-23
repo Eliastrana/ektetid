@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
+import { Avatar } from '@/components/avatar';
 import { Scrim } from '@/components/scrim';
 import { albumCoverLayout } from '@/lib/album-customization';
 import type { FeedAlbum } from '@/lib/feed';
@@ -149,35 +150,13 @@ export function AlbumCard({
           {showOwner ? (
             <View
               className={`${editorial && album.description ? 'mb-0.5' : 'mb-1.5'} flex-row items-center gap-1.5`}>
-              {album.owner_avatar_url ? (
-                <View
-                  className="overflow-hidden rounded-full"
-                  style={{
-                    width: avatar,
-                    height: avatar,
-                    borderWidth: pro ? 1.5 : 0,
-                    borderColor: pro ? '#ffffff' : 'transparent',
-                  }}>
-                  <Image
-                    source={{ uri: album.owner_avatar_url }}
-                    contentFit="cover"
-                    style={{ flex: 1 }}
-                  />
-                </View>
-              ) : (
-                <View
-                  className="items-center justify-center rounded-full bg-glass-strong"
-                  style={{
-                    width: avatar,
-                    height: avatar,
-                    borderWidth: pro ? 1.5 : 0,
-                    borderColor: pro ? '#ffffff' : 'transparent',
-                  }}>
-                  <Text className={`text-ink ${wide ? 'text-[11px]' : 'text-[9px]'}`}>
-                    {owner.trim().charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
+              <Avatar
+                url={album.owner_avatar_url}
+                name={owner}
+                seed={album.owner_id ?? owner}
+                size={avatar}
+                ringWidth={pro ? 1.5 : 0}
+              />
               <Text
                 numberOfLines={1}
                 className={`flex-1 text-ink opacity-85 ${wide ? 'text-sm' : 'text-xs'}`}>
