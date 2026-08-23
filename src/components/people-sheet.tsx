@@ -1,10 +1,11 @@
+import SegmentedControl from '@react-native-segmented-control/segmented-control';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
 
+import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
-import { Segmented } from '@/components/segmented';
 import {
   fetchLikers,
   fetchPostViewers,
@@ -48,10 +49,9 @@ function toRows(mode: Mode, data: Liker[] | PostViewer[]): Row[] {
   }));
 }
 
-const OPTIONS: { value: Mode; label: string }[] = [
-  { value: 'likes', label: 'Hjerter' },
-  { value: 'views', label: 'Har sett' },
-];
+/** Index order is the segmented control's contract, so the two stay together. */
+const MODES: Mode[] = ['likes', 'views'];
+const MODE_LABELS = ['Hjerter', 'Har sett'];
 
 export function PeopleSheet({
   postId,
@@ -110,22 +110,27 @@ export function PeopleSheet({
           <Screen className="flex-1" edges={['bottom']}>
             <View className="flex-row items-center justify-between px-5 py-4">
               {canSeeViews ? (
-                <Segmented options={OPTIONS} value={mode} onChange={setMode} />
+                <SegmentedControl
+                  values={MODE_LABELS}
+                  selectedIndex={MODES.indexOf(mode)}
+                  onChange={({ nativeEvent }) => {
+                    const next = MODES[nativeEvent.selectedSegmentIndex];
+                    if (!next) return;
+                    void Haptics.selectionAsync();
+                    setMode(next);
+                  }}
+                  accessibilityLabel="Velg hjerter eller hvem som har sett"
+                  style={{ width: 190, height: 34 }}
+                />
               ) : (
                 <Text className="text-xl text-ink">Hjerter</Text>
               )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Lukk"
+              <NativePostButton
+                label="Lukk"
+                systemImage="xmark"
+                appearance="glass"
                 onPress={onClose}
-                className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-                <SymbolView
-                  name="xmark"
-                  size={15}
-                  tintColor="#ffffff"
-                  fallback={<Text className="text-base text-ink">✕</Text>}
-                />
-              </Pressable>
+              />
             </View>
 
             {loading ? (
