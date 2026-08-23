@@ -1,8 +1,16 @@
 import SegmentedControl from '@react-native-segmented-control/segmented-control';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
@@ -53,6 +61,59 @@ function toRows(mode: Mode, data: Liker[] | PostViewer[]): Row[] {
 const MODES: Mode[] = ['likes', 'views'];
 const MODE_LABELS = ['Hjerter', 'Har sett'];
 
+/** One list's worth of state. Both are held so a swipe has somewhere to land. */
+type ListState = { rows: Row[]; loading: boolean; failed: boolean };
+
+const EMPTY: ListState = { rows: [], loading: true, failed: false };
+
+function PeopleList({ state, mode }: { state: ListState; mode: Mode }) {
+  if (state.loading) {
+    return (
+      <View className="gap-2 px-5">
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={state.rows}
+      keyExtractor={(item) => item.key}
+      contentContainerClassName="px-5 pb-6"
+      ListEmptyComponent={
+        <Text className="py-12 text-center text-sm text-muted">
+          {state.failed
+            ? 'Klarte ikke å hente listen. Prøv igjen senere.'
+            : mode === 'likes'
+              ? 'Ingen hjerter ennå.'
+              : 'Ingen har sett innlegget ennå.'}
+        </Text>
+      }
+      renderItem={({ item }) => (
+        <View className="flex-row items-center gap-3 py-2">
+          {item.profile.avatar_url ? (
+            <Image
+              source={{ uri: item.profile.avatar_url }}
+              cachePolicy="memory-disk"
+              style={{ width: 44, height: 44, borderRadius: 22 }}
+            />
+          ) : (
+            <View className="h-11 w-11 rounded-full bg-surface-raised" />
+          )}
+          <View className="flex-1">
+            <Text className="text-base text-ink">
+              {item.profile.display_name ?? item.profile.username}
+            </Text>
+            <Text className="text-xs text-muted">{item.detail}</Text>
+          </View>
+        </View>
+      )}
+    />
+  );
+}
+
 export function PeopleSheet({
   postId,
   initialMode,
@@ -71,36 +132,59 @@ export function PeopleSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { width } = useWindowDimensions();
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
+  const [likes, setLikes] = useState<ListState>(EMPTY);
+  const [views, setViews] = useState<ListState>(EMPTY);
+  const pager = useRef<ScrollView>(null);
+  const placed = useRef(false);
 
   useEffect(() => {
     if (visible) setMode(canSeeViews ? initialMode : 'likes');
+    else placed.current = false;
   }, [canSeeViews, initialMode, visible]);
 
+  // Both lists load up front. A swipe that had to wait for its fetch before
+  // showing anything would defeat the point of being able to swipe at all.
   useEffect(() => {
     if (!visible) return;
     let active = true;
-    setRows([]);
-    setLoading(true);
-    setFailed(false);
-    const request = mode === 'likes' ? fetchLikers(postId) : fetchPostViewers(postId);
-    void request
+
+    setLikes(EMPTY);
+    void fetchLikers(postId)
       .then((data) => {
-        if (active) setRows(toRows(mode, data));
+        if (active) setLikes({ rows: toRows('likes', data), loading: false, failed: false });
       })
       .catch(() => {
-        if (active) setFailed(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLikes({ rows: [], loading: false, failed: true });
       });
+
+    if (!canSeeViews) return () => {
+      active = false;
+    };
+
+    setViews(EMPTY);
+    void fetchPostViewers(postId)
+      .then((data) => {
+        if (active) setViews({ rows: toRows('views', data), loading: false, failed: false });
+      })
+      .catch(() => {
+        if (active) setViews({ rows: [], loading: false, failed: true });
+      });
+
     return () => {
       active = false;
     };
-  }, [mode, postId, visible]);
+  }, [canSeeViews, postId, visible]);
+
+  /** Drive the pager from the control, so both routes end in the same place. */
+  const show = useCallback(
+    (next: Mode) => {
+      setMode(next);
+      pager.current?.scrollTo({ x: MODES.indexOf(next) * width, animated: true });
+    },
+    [width]
+  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -117,7 +201,7 @@ export function PeopleSheet({
                     const next = MODES[nativeEvent.selectedSegmentIndex];
                     if (!next) return;
                     void Haptics.selectionAsync();
-                    setMode(next);
+                    show(next);
                   }}
                   accessibilityLabel="Velg hjerter eller hvem som har sett"
                   style={{ width: 190, height: 34 }}
@@ -133,46 +217,40 @@ export function PeopleSheet({
               />
             </View>
 
-            {loading ? (
-              <View className="gap-2 px-5">
-                <SkeletonRow />
-                <SkeletonRow />
-                <SkeletonRow />
-              </View>
+            {canSeeViews ? (
+              <ScrollView
+                ref={pager}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                // The lists scroll vertically inside each page; without this the
+                // pager claims the gesture and neither list moves.
+                directionalLockEnabled
+                onLayout={() => {
+                  // Opening straight onto the viewer list has to start there
+                  // rather than animate across on first paint.
+                  if (placed.current) return;
+                  placed.current = true;
+                  pager.current?.scrollTo({
+                    x: MODES.indexOf(mode) * width,
+                    animated: false,
+                  });
+                }}
+                onMomentumScrollEnd={({ nativeEvent }) => {
+                  const next = MODES[Math.round(nativeEvent.contentOffset.x / width)];
+                  if (!next || next === mode) return;
+                  void Haptics.selectionAsync();
+                  setMode(next);
+                }}>
+                <View style={{ width }}>
+                  <PeopleList state={likes} mode="likes" />
+                </View>
+                <View style={{ width }}>
+                  <PeopleList state={views} mode="views" />
+                </View>
+              </ScrollView>
             ) : (
-              <FlatList
-                data={rows}
-                keyExtractor={(item) => item.key}
-                contentContainerClassName="px-5 pb-6"
-                ListEmptyComponent={
-                  <Text className="py-12 text-center text-sm text-muted">
-                    {failed
-                      ? 'Klarte ikke å hente listen. Prøv igjen senere.'
-                      : mode === 'likes'
-                        ? 'Ingen hjerter ennå.'
-                        : 'Ingen har sett innlegget ennå.'}
-                  </Text>
-                }
-                renderItem={({ item }) => (
-                  <View className="flex-row items-center gap-3 py-2">
-                    {item.profile.avatar_url ? (
-                      <Image
-                        source={{ uri: item.profile.avatar_url }}
-                        cachePolicy="memory-disk"
-                        style={{ width: 44, height: 44, borderRadius: 22 }}
-                      />
-                    ) : (
-                      <View className="h-11 w-11 rounded-full bg-surface-raised" />
-                    )}
-                    <View className="flex-1">
-                      <Text className="text-base text-ink">
-                        {item.profile.display_name ?? item.profile.username}
-                      </Text>
-                      <Text className="text-xs text-muted">{item.detail}</Text>
-                    </View>
-                  </View>
-                )}
-              />
+              <PeopleList state={likes} mode="likes" />
             )}
           </Screen>
         </View>
