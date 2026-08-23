@@ -29,8 +29,10 @@ import { imageSpecs, PostTile } from '@/components/post-tile';
 import { PostVideo } from '@/components/post-video';
 import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
+import { PostGridSheet } from '@/components/post-grid-sheet';
 import { StoryProgress } from '@/components/story-progress';
 import { fetchAlbum, markAlbumRead, type AlbumDetail } from '@/lib/album';
+import { fetchNextAlbum, type NextAlbum } from '@/lib/feed';
 import { decodeOrigin } from '@/lib/origin';
 import type { ReportTarget } from '@/lib/moderation';
 import {
@@ -218,6 +220,8 @@ export default function AlbumScreen() {
   const [peopleMode, setPeopleMode] = useState<'likes' | 'views' | null>(null);
   const [isPro, setIsPro] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [nextAlbum, setNextAlbum] = useState<NextAlbum | null>(null);
+  const [showGrid, setShowGrid] = useState(false);
 
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -235,6 +239,19 @@ export default function AlbumScreen() {
       active = false;
     };
   }, [session]);
+
+  // Resolved while the reader is still on the first posts, so arriving at the
+  // end never waits on a request.
+  useEffect(() => {
+    if (!album?.id) return;
+    let active = true;
+    void fetchNextAlbum(album.id)
+      .then((value) => active && setNextAlbum(value))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [album?.id]);
 
   // ---------------------------------------------------------------- loading
 
@@ -364,6 +381,27 @@ export default function AlbumScreen() {
 
   // -------------------------------------------------------------- navigation
 
+  /**
+   * Hand over to the album that follows this one.
+   *
+   * `replace` rather than `push`: reading forward through albums would
+   * otherwise stack every one visited, and the close button would walk back
+   * through them one at a time instead of returning to the feed.
+   */
+  const openNextAlbum = useCallback(
+    (target: NextAlbum) => {
+      router.replace({
+        pathname: '/album/[id]',
+        params: {
+          id: target.id,
+          ...(target.coverUrl ? { cover: target.coverUrl } : {}),
+          ...(target.coverBlurhash ? { cb: target.coverBlurhash } : {}),
+        },
+      });
+    },
+    [router]
+  );
+
   const go = useCallback(
     (delta: number) => {
       const next = index + delta;
@@ -375,6 +413,21 @@ export default function AlbumScreen() {
         return;
       }
       if (next >= posts.length) {
+        // The end of the last album is still a wall; the end of any other is a
+        // doorway. Sliding fully off to the left says the album is finished,
+        // where the per-post spring would have said it merely resisted.
+        if (nextAlbum) {
+          const target = nextAlbum;
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          translateX.value = withTiming(
+            -width,
+            { duration: 260, easing: Easing.out(Easing.cubic) },
+            (finished) => {
+              if (finished) runOnJS(openNextAlbum)(target);
+            }
+          );
+          return;
+        }
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
         return;
       }
@@ -390,7 +443,7 @@ export default function AlbumScreen() {
       setIndex(next);
       revealChrome();
     },
-    [index, posts.length, revealChrome, zoomScale, zoomX, zoomY]
+    [index, nextAlbum, openNextAlbum, posts.length, revealChrome, translateX, width, zoomScale, zoomX, zoomY]
   );
 
   const settle = useCallback(
@@ -739,7 +792,14 @@ export default function AlbumScreen() {
 
       <Screen className="absolute inset-0" pointerEvents="box-none">
         <Animated.View style={chromeStyle} pointerEvents="box-none" className="px-4 pt-2">
-          <StoryProgress count={posts.length} index={index} />
+          <StoryProgress
+            count={posts.length}
+            index={index}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              setShowGrid(true);
+            }}
+          />
           <View className="mt-3 flex-row items-center gap-3">
             <NativePostButton
               label="Lukk album"
@@ -779,7 +839,9 @@ export default function AlbumScreen() {
             ) : null}
           </View>
 
-          <View className="mt-2 flex-row items-center gap-2">
+          {/* Matches the gap above it: the sound button is the same glass circle
+              as the row's controls, and at mt-2 the two rows read as touching. */}
+          <View className="mt-3 flex-row items-center gap-2">
             <View className="min-w-0 flex-1 flex-row items-center gap-2">
               {expanded && currentSpecs.length > 0 ? (
                 <ScrollView
@@ -949,10 +1011,31 @@ export default function AlbumScreen() {
         />
       ) : null}
 
+      {posts.length > 0 ? (
+        <PostGridSheet
+          posts={posts}
+          index={index}
+          visible={showGrid}
+          onClose={() => setShowGrid(false)}
+          onSelect={(position) => {
+            setShowGrid(false);
+            if (position === index) return;
+            setExpanded(false);
+            // Each post starts on its own terms, exactly as when tapping
+            // through: silent, and framed as shot.
+            setMuted(true);
+            setUncropped(false);
+            setIndex(position);
+            revealChrome();
+          }}
+        />
+      ) : null}
+
       {current && peopleMode ? (
         <PeopleSheet
           postId={current.id}
-          mode={peopleMode}
+          initialMode={peopleMode}
+          canSeeViews={!!session && current.author_id === session.user.id && isPro}
           visible
           onClose={() => setPeopleMode(null)}
         />

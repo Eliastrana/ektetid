@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { Segmented } from '@/components/segmented';
 import {
   fetchLikers,
   fetchPostViewers,
@@ -47,20 +48,37 @@ function toRows(mode: Mode, data: Liker[] | PostViewer[]): Row[] {
   }));
 }
 
+const OPTIONS: { value: Mode; label: string }[] = [
+  { value: 'likes', label: 'Hjerter' },
+  { value: 'views', label: 'Har sett' },
+];
+
 export function PeopleSheet({
   postId,
-  mode,
+  initialMode,
+  canSeeViews,
   visible,
   onClose,
 }: {
   postId: string;
-  mode: Mode;
+  initialMode: Mode;
+  /**
+   * Whether the viewer list is available: your own post, on Pro. Hearts are
+   * open to everyone, so the toggle only appears when there is a second list
+   * to switch to.
+   */
+  canSeeViews: boolean;
   visible: boolean;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (visible) setMode(canSeeViews ? initialMode : 'likes');
+  }, [canSeeViews, initialMode, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -91,7 +109,11 @@ export function PeopleSheet({
         <View className="h-[58vh] rounded-t-3xl bg-surface">
           <Screen className="flex-1" edges={['bottom']}>
             <View className="flex-row items-center justify-between px-5 py-4">
-              <Text className="text-xl text-ink">{mode === 'likes' ? 'Hjerter' : 'Har sett'}</Text>
+              {canSeeViews ? (
+                <Segmented options={OPTIONS} value={mode} onChange={setMode} />
+              ) : (
+                <Text className="text-xl text-ink">Hjerter</Text>
+              )}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Lukk"

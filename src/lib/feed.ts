@@ -79,3 +79,56 @@ export async function fetchFeed(userId: string): Promise<FeedResult> {
     })),
   };
 }
+
+export type NextAlbum = {
+  id: string;
+  title: string;
+  coverUrl: string | null;
+  coverBlurhash: string | null;
+};
+
+/**
+ * The album that follows this one in the feed's own order.
+ *
+ * Reading to the end of an album used to be a dead end, which made a feed of
+ * short albums feel like it kept stopping. Ordering matches `fetchFeed` — most
+ * recent activity first — so advancing lands on whatever the reader would have
+ * tapped next anyway.
+ *
+ * Resolved from the current album's `last_post_at` rather than by walking a
+ * list the viewer does not have: the album screen is reachable from a
+ * notification and a profile too, where no feed was ever loaded. An album with
+ * no posts has no position in that order and simply has no successor.
+ */
+export async function fetchNextAlbum(albumId: string): Promise<NextAlbum | null> {
+  const current = await supabase
+    .from('album_feed')
+    .select('last_post_at')
+    .eq('id', albumId)
+    .maybeSingle();
+
+  if (current.error || !current.data?.last_post_at) return null;
+
+  const { data, error } = await supabase
+    .from('album_feed')
+    .select('id, title, cover_image_path, cover_blurhash')
+    .lt('last_post_at', current.data.last_post_at)
+    .order('last_post_at', { ascending: false, nullsFirst: false })
+    .limit(1);
+
+  if (error || !data?.length) return null;
+
+  const album = data[0];
+  if (!album.id) return null;
+
+  const urls = album.cover_image_path
+    ? await signedUrls([album.cover_image_path]).catch(() => new Map<string, string>())
+    : new Map<string, string>();
+
+  return {
+    id: album.id,
+    title: album.title ?? '',
+    coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
+    coverBlurhash: album.cover_blurhash ?? null,
+  };
+}
