@@ -2,16 +2,9 @@ import SegmentedControl from '@react-native-segmented-control/segmented-control'
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { FlatList, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
+import { BottomSheet } from '@/components/bottom-sheet';
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import {
@@ -187,74 +180,69 @@ export function PeopleSheet({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/50">
-        <Pressable accessibilityRole="button" className="flex-1" onPress={onClose} />
-        <View className="h-[58vh] rounded-t-3xl bg-surface">
-          <Screen className="flex-1" edges={['bottom']}>
-            <View className="flex-row items-center justify-between px-5 py-4">
-              {canSeeViews ? (
-                <SegmentedControl
-                  values={MODE_LABELS}
-                  selectedIndex={MODES.indexOf(mode)}
-                  onChange={({ nativeEvent }) => {
-                    const next = MODES[nativeEvent.selectedSegmentIndex];
-                    if (!next) return;
-                    void Haptics.selectionAsync();
-                    show(next);
-                  }}
-                  accessibilityLabel="Velg hjerter eller hvem som har sett"
-                  style={{ width: 190, height: 34 }}
-                />
-              ) : (
-                <Text className="text-xl text-ink">Hjerter</Text>
-              )}
-              <NativePostButton
-                label="Lukk"
-                systemImage="xmark"
-                appearance="glass"
-                onPress={onClose}
-              />
-            </View>
-
-            {canSeeViews ? (
-              <ScrollView
-                ref={pager}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                // The lists scroll vertically inside each page; without this the
-                // pager claims the gesture and neither list moves.
-                directionalLockEnabled
-                onLayout={() => {
-                  // Opening straight onto the viewer list has to start there
-                  // rather than animate across on first paint.
-                  if (placed.current) return;
-                  placed.current = true;
-                  pager.current?.scrollTo({
-                    x: MODES.indexOf(mode) * width,
-                    animated: false,
-                  });
-                }}
-                onMomentumScrollEnd={({ nativeEvent }) => {
-                  const next = MODES[Math.round(nativeEvent.contentOffset.x / width)];
-                  if (!next || next === mode) return;
-                  void Haptics.selectionAsync();
-                  setMode(next);
-                }}>
-                <View style={{ width }}>
-                  <PeopleList state={likes} mode="likes" />
-                </View>
-                <View style={{ width }}>
-                  <PeopleList state={views} mode="views" />
-                </View>
-              </ScrollView>
-            ) : (
-              <PeopleList state={likes} mode="likes" />
-            )}
-          </Screen>
+    <BottomSheet visible={visible} onClose={onClose} className="h-[58vh]">
+      <Screen className="flex-1" edges={['bottom']}>
+        <View className="flex-row items-center justify-between px-5 py-4">
+          {canSeeViews ? (
+            <SegmentedControl
+              values={MODE_LABELS}
+              selectedIndex={MODES.indexOf(mode)}
+              onChange={({ nativeEvent }) => {
+                const next = MODES[nativeEvent.selectedSegmentIndex];
+                if (!next) return;
+                void Haptics.selectionAsync();
+                show(next);
+              }}
+              accessibilityLabel="Velg hjerter eller hvem som har sett"
+              style={{ width: 190, height: 34 }}
+            />
+          ) : (
+            <Text className="text-xl text-ink">Hjerter</Text>
+          )}
+          <NativePostButton
+            label="Lukk"
+            systemImage="xmark"
+            appearance="glass"
+            onPress={onClose}
+          />
         </View>
-      </View>
-    </Modal>
+
+        {canSeeViews ? (
+          <ScrollView
+            ref={pager}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            // The lists scroll vertically inside each page; without this the
+            // pager claims the gesture and neither list moves.
+            directionalLockEnabled
+            onLayout={() => {
+              // Opening straight onto the viewer list has to start there
+              // rather than animate across on first paint.
+              if (placed.current) return;
+              placed.current = true;
+              pager.current?.scrollTo({
+                x: MODES.indexOf(mode) * width,
+                animated: false,
+              });
+            }}
+            onMomentumScrollEnd={({ nativeEvent }) => {
+              const next = MODES[Math.round(nativeEvent.contentOffset.x / width)];
+              if (!next || next === mode) return;
+              void Haptics.selectionAsync();
+              setMode(next);
+            }}>
+            <View style={{ width }}>
+              <PeopleList state={likes} mode="likes" />
+            </View>
+            <View style={{ width }}>
+              <PeopleList state={views} mode="views" />
+            </View>
+          </ScrollView>
+        ) : (
+          <PeopleList state={likes} mode="likes" />
+        )}
+      </Screen>
+    </BottomSheet>
   );
 }

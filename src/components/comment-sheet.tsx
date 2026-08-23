@@ -3,17 +3,10 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Pressable,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BottomSheet } from '@/components/bottom-sheet';
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import {
@@ -158,161 +151,156 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/50">
-        <Pressable accessibilityRole="button" className="flex-1" onPress={onClose} />
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      className="max-h-[70vh] min-h-[45vh]"
+      avoidKeyboard
+      // Screen already reserves the home-indicator inset inside the sheet.
+      // Subtract it from iOS' keyboard displacement so the same inset is not
+      // counted twice as an empty band above the keyboard.
+      keyboardVerticalOffset={process.env.EXPO_OS === 'ios' ? -insets.bottom : 0}>
+      <Screen className="flex-1" edges={['bottom']}>
+        <View className="flex-row items-center justify-between px-5 py-4">
+          <Text className="text-xl text-ink">Kommentarer</Text>
+          <NativePostButton
+            label="Lukk kommentarer"
+            systemImage="xmark"
+            onPress={onClose}
+            appearance="glass"
+            size={36}
+          />
+        </View>
 
-        <KeyboardAvoidingView
-          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
-          // Screen already reserves the home-indicator inset inside the sheet.
-          // Subtract it from iOS' keyboard displacement so the same inset is
-          // not counted twice as an empty band above the keyboard.
-          keyboardVerticalOffset={process.env.EXPO_OS === 'ios' ? -insets.bottom : 0}>
-          <View className="max-h-[70vh] min-h-[45vh] rounded-t-3xl bg-surface">
-            <Screen className="flex-1" edges={['bottom']}>
-              <View className="flex-row items-center justify-between px-5 py-4">
-                <Text className="text-xl text-ink">Kommentarer</Text>
-                <NativePostButton
-                  label="Lukk kommentarer"
-                  systemImage="xmark"
-                  onPress={onClose}
-                  appearance="glass"
-                  size={36}
+        <FlatList
+          data={comments}
+          keyExtractor={(item) => item.id}
+          contentContainerClassName="px-5 pb-4 gap-4"
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            loading ? (
+              <View className="items-center py-10">
+                <ActivityIndicator color="#ffffff" />
+              </View>
+            ) : (
+              // Icon rather than a line of encouragement: the empty state
+              // is seen constantly and a prompt that asks for something
+              // clever gets tiring. Labelled for screen readers, which
+              // otherwise land on an empty list with nothing to announce.
+              <View
+                className="items-center py-12"
+                accessible
+                accessibilityLabel="Ingen kommentarer ennå">
+                <SymbolView
+                  name="message"
+                  size={38}
+                  tintColor="#3a3d42"
+                  fallback={<Text className="text-4xl text-muted opacity-30">◯</Text>}
                 />
               </View>
-
-              <FlatList
-                data={comments}
-                keyExtractor={(item) => item.id}
-                contentContainerClassName="px-5 pb-4 gap-4"
-                keyboardShouldPersistTaps="handled"
-                ListEmptyComponent={
-                  loading ? (
-                    <View className="items-center py-10">
-                      <ActivityIndicator color="#ffffff" />
-                    </View>
-                  ) : (
-                    // Icon rather than a line of encouragement: the empty state
-                    // is seen constantly and a prompt that asks for something
-                    // clever gets tiring. Labelled for screen readers, which
-                    // otherwise land on an empty list with nothing to announce.
-                    <View
-                      className="items-center py-12"
-                      accessible
-                      accessibilityLabel="Ingen kommentarer ennå">
-                      <SymbolView
-                        name="message"
-                        size={38}
-                        tintColor="#3a3d42"
-                        fallback={<Text className="text-4xl text-muted opacity-30">◯</Text>}
-                      />
-                    </View>
-                  )
-                }
-                renderItem={({ item }) => (
-                  <View
-                    className="flex-row gap-3"
-                    style={{ marginLeft: item.parent_comment_id ? 32 : 0 }}>
-                    {item.author?.avatar_url ? (
-                      <Image
-                        source={{ uri: item.author.avatar_url }}
-                        style={{ width: 36, height: 36, borderRadius: 18 }}
-                      />
-                    ) : (
-                      <View className="h-9 w-9 rounded-full bg-surface-raised" />
-                    )}
-                    <View className="flex-1">
-                      <View className="flex-row items-center gap-2">
-                        <Text className="text-sm text-ink">@{item.author?.username}</Text>
-                        <Text className="text-xs text-muted">
-                          {relativeTime(item.created_at)}
-                        </Text>
-                      </View>
-                      <Text className="mt-0.5 text-base text-ink">{item.body}</Text>
-                      <View className="mt-1 flex-row items-center gap-4">
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            item.likedByMe ? 'Fjern liker på kommentar' : 'Lik kommentar'
-                          }
-                          onPress={() => void likeComment(item)}
-                          className="flex-row items-center gap-1 py-1">
-                          <SymbolView
-                            name={item.likedByMe ? 'heart.fill' : 'heart'}
-                            size={13}
-                            tintColor={item.likedByMe ? '#ff3b30' : '#b0b4ba'}
-                            fallback={<Text className="text-xs text-muted">♥</Text>}
-                          />
-                          {item.likeCount > 0 ? (
-                            <Text className="text-xs text-muted">{item.likeCount}</Text>
-                          ) : null}
-                        </Pressable>
-                        {!item.parent_comment_id ? (
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Svar ${item.author?.username}`}
-                            onPress={() => {
-                              setReplyTo(item);
-                              void Haptics.selectionAsync();
-                            }}>
-                            <Text className="py-1 text-xs text-muted">Svar</Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </View>
-                    {item.author_id === selfId ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Slett kommentar"
-                        onPress={async () => {
-                          await deleteComment(item.id);
-                          await load();
-                        }}>
-                        <Text className="px-2 text-sm text-muted">Slett</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                )}
-              />
-
-              {replyTo ? (
-                <View className="flex-row items-center justify-between border-t border-glass-border px-5 pt-2">
-                  <Text className="text-xs text-muted">Svarer @{replyTo.author?.username}</Text>
+            )
+          }
+          renderItem={({ item }) => (
+            <View
+              className="flex-row gap-3"
+              style={{ marginLeft: item.parent_comment_id ? 32 : 0 }}>
+              {item.author?.avatar_url ? (
+                <Image
+                  source={{ uri: item.author.avatar_url }}
+                  style={{ width: 36, height: 36, borderRadius: 18 }}
+                />
+              ) : (
+                <View className="h-9 w-9 rounded-full bg-surface-raised" />
+              )}
+              <View className="flex-1">
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-sm text-ink">@{item.author?.username}</Text>
+                  <Text className="text-xs text-muted">
+                    {relativeTime(item.created_at)}
+                  </Text>
+                </View>
+                <Text className="mt-0.5 text-base text-ink">{item.body}</Text>
+                <View className="mt-1 flex-row items-center gap-4">
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Avbryt svar"
-                    onPress={() => setReplyTo(null)}>
-                    <Text className="px-2 py-1 text-xs text-ink">Avbryt</Text>
+                    accessibilityLabel={
+                      item.likedByMe ? 'Fjern liker på kommentar' : 'Lik kommentar'
+                    }
+                    onPress={() => void likeComment(item)}
+                    className="flex-row items-center gap-1 py-1">
+                    <SymbolView
+                      name={item.likedByMe ? 'heart.fill' : 'heart'}
+                      size={13}
+                      tintColor={item.likedByMe ? '#ff3b30' : '#b0b4ba'}
+                      fallback={<Text className="text-xs text-muted">♥</Text>}
+                    />
+                    {item.likeCount > 0 ? (
+                      <Text className="text-xs text-muted">{item.likeCount}</Text>
+                    ) : null}
                   </Pressable>
+                  {!item.parent_comment_id ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Svar ${item.author?.username}`}
+                      onPress={() => {
+                        setReplyTo(item);
+                        void Haptics.selectionAsync();
+                      }}>
+                      <Text className="py-1 text-xs text-muted">Svar</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-              ) : null}
-
-              <View
-                className={`flex-row items-center gap-2 px-5 py-3 ${
-                  replyTo ? '' : 'border-t border-glass-border'
-                }`}>
-                <NativeCommentInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder={replyTo ? 'Skriv et svar…' : 'Skriv en kommentar…'}
-                  disabled={sending}
-                  onSubmit={() => void send()}
-                />
-                <NativePostButton
-                  label="Send kommentar"
-                  systemImage={sending ? 'hourglass' : 'arrow.up'}
-                  disabled={!draft.trim() || sending}
-                  onPress={() => void send()}
-                  appearance="filled"
-                  tintColor="#ffffff"
-                  foregroundColor="#000000"
-                  size={48}
-                />
               </View>
-            </Screen>
+              {item.author_id === selfId ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Slett kommentar"
+                  onPress={async () => {
+                    await deleteComment(item.id);
+                    await load();
+                  }}>
+                  <Text className="px-2 text-sm text-muted">Slett</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
+        />
+
+        {replyTo ? (
+          <View className="flex-row items-center justify-between border-t border-glass-border px-5 pt-2">
+            <Text className="text-xs text-muted">Svarer @{replyTo.author?.username}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Avbryt svar"
+              onPress={() => setReplyTo(null)}>
+              <Text className="px-2 py-1 text-xs text-ink">Avbryt</Text>
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
+        ) : null}
+
+        <View
+          className={`flex-row items-center gap-2 px-5 py-3 ${
+            replyTo ? '' : 'border-t border-glass-border'
+          }`}>
+          <NativeCommentInput
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={replyTo ? 'Skriv et svar…' : 'Skriv en kommentar…'}
+            disabled={sending}
+            onSubmit={() => void send()}
+          />
+          <NativePostButton
+            label="Send kommentar"
+            systemImage={sending ? 'hourglass' : 'arrow.up'}
+            disabled={!draft.trim() || sending}
+            onPress={() => void send()}
+            appearance="filled"
+            tintColor="#ffffff"
+            foregroundColor="#000000"
+            size={48}
+          />
+        </View>
+      </Screen>
+    </BottomSheet>
   );
 }
