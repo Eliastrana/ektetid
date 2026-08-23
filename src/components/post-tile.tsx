@@ -102,6 +102,17 @@ function formatShutterSpeed(data: Record<string, unknown>): string | null {
   return `${rounded} s`;
 }
 
+/**
+ * Aperture the way a lens is labelled: ƒ/1.8, not ƒ/1.7999999523162842, and
+ * ƒ/2 rather than ƒ/2.0. EXIF stores FNumber as a rational often decoded to a
+ * float, so the raw value carries binary noise that reads as broken precision.
+ */
+function formatAperture(data: Record<string, unknown>): string | null {
+  const value = numericExifValue(data.FNumber ?? data.fNumber);
+  if (value === null || value <= 0) return null;
+  return `ƒ/${Number(value.toFixed(1))}`;
+}
+
 export function imageSpecs(exif: unknown): string[] {
   if (!exif || typeof exif !== 'object' || Array.isArray(exif)) return [];
   const data = exif as Record<string, unknown>;
@@ -114,14 +125,14 @@ export function imageSpecs(exif: unknown): string[] {
   const width = text('PixelXDimension') ?? text('ImageWidth');
   const height = text('PixelYDimension') ?? text('ImageHeight');
   const iso = text('ISOSpeedRatings') ?? text('PhotographicSensitivity');
-  const aperture = text('FNumber');
+  const aperture = formatAperture(data);
   const shutterSpeed = formatShutterSpeed(data);
 
   return [
     model,
     width && height ? `${width} × ${height}` : null,
     iso ? `ISO ${iso}` : null,
-    aperture ? `ƒ/${aperture}` : null,
+    aperture,
     shutterSpeed,
   ].filter((value): value is string => !!value);
 }

@@ -34,12 +34,21 @@ export default function OnboardingScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <Screen className="flex-1" edges={['top', 'bottom']}>
+        {/*
+          Hidden rather than unmounted on the last page. Removing it collapses
+          this row to nothing, and every page's centred content jumps upward as
+          the reader arrives at the end.
+        */}
         <View className="flex-row justify-end px-5 pt-2">
-          {!last ? (
-            <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()}>
-              <Text className="px-2 py-3 text-sm text-muted">Hopp over</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityElementsHidden={last}
+            importantForAccessibility={last ? 'no-hide-descendants' : 'auto'}
+            disabled={last}
+            style={{ opacity: last ? 0 : 1 }}
+            onPress={() => void completeOnboarding()}>
+            <Text className="px-2 py-3 text-sm text-muted">Hopp over</Text>
+          </Pressable>
         </View>
 
         <FlatList
