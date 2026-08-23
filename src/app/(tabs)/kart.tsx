@@ -10,6 +10,7 @@ import { Screen } from '@/components/screen';
 import { Segmented } from '@/components/segmented';
 import {
   clusterPosts,
+  expandSmallClusters,
   fetchLocatedPosts,
   hydrateLocatedPostImages,
   postsInView,
@@ -141,7 +142,7 @@ export default function MapScreen() {
       // them progressively once the signed thumbnail URLs arrive.
       const opening = regionFor(immediate);
       const firstWanted = opening
-        ? clusterPosts(postsInView(immediate, opening), opening)
+        ? expandSmallClusters(clusterPosts(postsInView(immediate, opening), opening))
             .filter((cluster) => cluster.posts.length === 1)
             .map((cluster) => cluster.posts[0])
         : [];
@@ -182,7 +183,8 @@ export default function MapScreen() {
    * so a country's worth of pins off screen costs nothing.
    */
   const clusters = useMemo(
-    () => (view ? clusterPosts(postsInView(posts, view), view) : []),
+    () =>
+      view ? expandSmallClusters(clusterPosts(postsInView(posts, view), view)) : [],
     [posts, view]
   );
 

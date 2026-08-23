@@ -54,6 +54,49 @@ export type MapCluster = {
 };
 
 /**
+ * Break clusters back into individual photos wherever the budget allows.
+ *
+ * Clustering exists to stop a dense map signing and capturing hundreds of
+ * thumbnails, not to hide photos that would happily fit. Once the camera is
+ * close enough that only a handful of posts are in view, a bubble reading "2"
+ * is strictly worse than the two photos it stands for.
+ *
+ * Smallest first, so the budget is spent where it reveals the most: expanding
+ * three twos shows six photos, while one six shows the same for the same cost
+ * but leaves the map looking coarser. Whatever will not fit stays a count.
+ */
+export function expandSmallClusters(
+  clusters: MapCluster[],
+  budget = MAX_MAP_PHOTO_PINS
+): MapCluster[] {
+  const singles = clusters.filter((cluster) => cluster.posts.length === 1);
+  const groups = clusters
+    .filter((cluster) => cluster.posts.length > 1)
+    .sort((a, b) => a.posts.length - b.posts.length);
+
+  let spent = singles.length;
+  const out: MapCluster[] = [...singles];
+
+  for (const group of groups) {
+    if (spent + group.posts.length <= budget) {
+      spent += group.posts.length;
+      out.push(
+        ...group.posts.map((post) => ({
+          id: post.id,
+          latitude: post.latitude,
+          longitude: post.longitude,
+          posts: [post],
+        }))
+      );
+    } else {
+      out.push(group);
+    }
+  }
+
+  return out;
+}
+
+/**
  * Posts near enough to the camera to be worth drawing.
  *
  * The margin keeps pins just off screen ready, so a short pan reveals photos
