@@ -36,7 +36,14 @@ export const PIN_HEIGHT = PIN_SIZE;
  *
  * Rendered offscreen and captured, never shown to the user directly.
  */
-function PinFrame({ children }: { children: React.ReactNode }) {
+function PinFrame({
+  children,
+  well = '#000000',
+}: {
+  children: React.ReactNode;
+  /** Fill behind the contents. Black sits under a photo; a count inverts it. */
+  well?: string;
+}) {
   return (
     <View style={{ width: PIN_WIDTH, height: PIN_HEIGHT, alignItems: 'center' }}>
       {/*
@@ -68,7 +75,7 @@ function PinFrame({ children }: { children: React.ReactNode }) {
           borderWidth: 3,
           borderColor: '#ffffff',
           overflow: 'hidden',
-          backgroundColor: '#000000',
+          backgroundColor: well,
           alignItems: 'center',
           justifyContent: 'center',
         }}>
@@ -120,10 +127,12 @@ export function CountPin({ count }: { count: number }) {
   const size = label.length >= 4 ? 15 : label.length === 3 ? 18 : 22;
 
   return (
-    <PinFrame>
+    // White throughout: the ring and well merge into one disc, which is what
+    // separates a count from a photo at a glance without changing the shape.
+    <PinFrame well="#ffffff">
       <Text
         style={{
-          color: '#ffffff',
+          color: '#000000',
           fontSize: size,
           fontWeight: '600',
           // Centres the glyphs in the well: the default line box leaves digits
