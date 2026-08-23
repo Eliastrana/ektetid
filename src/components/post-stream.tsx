@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -5,10 +6,18 @@ import type { ReactElement } from 'react';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { useAuth } from '@/components/auth-provider';
 import { Avatar } from '@/components/avatar';
+import { CommentSheet } from '@/components/comment-sheet';
+import { PeopleSheet } from '@/components/people-sheet';
 import { ErrorNotice } from '@/components/error-notice';
 import { SkeletonBox } from '@/components/skeleton';
 import { fetchPostFeed, type PostFeedItem } from '@/lib/post-feed';
+import {
+  fetchPostSocialCounts,
+  toggleLike,
+  type PostSocialCounts,
+} from '@/lib/social';
 
 function StreamSkeleton() {
   return (
@@ -26,7 +35,21 @@ function StreamSkeleton() {
   );
 }
 
-function PostCard({ item }: { item: PostFeedItem }) {
+const NO_SOCIAL: PostSocialCounts = { likes: 0, likedByMe: false, comments: 0 };
+
+function PostCard({
+  item,
+  social,
+  onToggleLike,
+  onComment,
+  onShowLikers,
+}: {
+  item: PostFeedItem;
+  social: PostSocialCounts;
+  onToggleLike: () => void;
+  onComment: () => void;
+  onShowLikers: () => void;
+}) {
   const router = useRouter();
   const authorName = item.author.display_name ?? item.author.username;
 
@@ -101,28 +124,128 @@ function PostCard({ item }: { item: PostFeedItem }) {
             {item.description}
           </Text>
         ) : null}
+
+        {/*
+          Hearts and comments belong on the card. The stream exists to be read
+          straight through, and making someone open the album to respond turns
+          a reaction into a detour they mostly will not take.
+        */}
+        <View className="mt-1 flex-row items-center gap-5">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={social.likedByMe ? 'Fjern hjerte' : 'Gi hjerte'}
+            onPress={onToggleLike}
+            className="flex-row items-center gap-2 active:opacity-60">
+            <SymbolView
+              name={social.likedByMe ? 'heart.fill' : 'heart'}
+              size={20}
+              tintColor={social.likedByMe ? '#ff3b30' : '#ffffff'}
+              fallback={<Text className="text-base text-ink">♥</Text>}
+            />
+            {social.likes > 0 ? (
+              <Text className="text-sm text-muted">{social.likes}</Text>
+            ) : null}
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kommentarer"
+            onPress={onComment}
+            className="flex-row items-center gap-2 active:opacity-60">
+            <SymbolView
+              name="bubble.left"
+              size={20}
+              tintColor="#ffffff"
+              fallback={<Text className="text-base text-ink">💬</Text>}
+            />
+            {social.comments > 0 ? (
+              <Text className="text-sm text-muted">{social.comments}</Text>
+            ) : null}
+          </Pressable>
+
+          {social.likes > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Se hvem som ga ${social.likes} hjerter`}
+              onPress={onShowLikers}
+              className="active:opacity-60">
+              <Text className="text-sm text-muted">Se hvem</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </View>
   );
 }
 
 export function PostStream({ header }: { header: ReactElement }) {
+  const { session } = useAuth();
+  const selfId = session?.user.id;
   const [posts, setPosts] = useState<PostFeedItem[]>([]);
+  const [social, setSocial] = useState<Map<string, PostSocialCounts>>(new Map());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  const [likersFor, setLikersFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setPosts(await fetchPostFeed());
+      const feed = await fetchPostFeed();
+      setPosts(feed);
       setError(null);
+      // Counts follow the posts rather than blocking them: the photographs are
+      // the point, and a heart arriving a moment later costs nothing.
+      if (selfId) {
+        void fetchPostSocialCounts(
+          feed.map((post) => post.id),
+          selfId
+        )
+          .then(setSocial)
+          .catch(() => {});
+      }
     } catch {
       setError('Klarte ikke å hente strømmen.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selfId]);
+
+  const onToggleLike = useCallback(
+    async (postId: string) => {
+      if (!selfId) return;
+      const before = social.get(postId) ?? NO_SOCIAL;
+
+      // Optimistic: the heart should answer the tap, not the round trip.
+      setSocial((current) => {
+        const next = new Map(current);
+        next.set(postId, {
+          ...before,
+          likes: before.likes + (before.likedByMe ? -1 : 1),
+          likedByMe: !before.likedByMe,
+        });
+        return next;
+      });
+      void Haptics.impactAsync(
+        before.likedByMe
+          ? Haptics.ImpactFeedbackStyle.Light
+          : Haptics.ImpactFeedbackStyle.Medium
+      );
+
+      try {
+        await toggleLike(postId, selfId, before.likedByMe);
+      } catch {
+        setSocial((current) => {
+          const next = new Map(current);
+          next.set(postId, before);
+          return next;
+        });
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    },
+    [selfId, social]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -131,35 +254,77 @@ export function PostStream({ header }: { header: ReactElement }) {
   );
 
   return (
-    <FlatList
-      data={posts}
-      keyExtractor={(post) => post.id}
-      renderItem={({ item }) => <PostCard item={item} />}
-      contentContainerClassName="gap-5 px-4 pb-32"
-      initialNumToRender={2}
-      maxToRenderPerBatch={3}
-      windowSize={5}
-      removeClippedSubviews
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            void load();
+    <>
+      <FlatList
+        data={posts}
+        keyExtractor={(post) => post.id}
+        renderItem={({ item }) => (
+          <PostCard
+            item={item}
+            social={social.get(item.id) ?? NO_SOCIAL}
+            onToggleLike={() => void onToggleLike(item.id)}
+            onComment={() => setCommentsFor(item.id)}
+            onShowLikers={() => setLikersFor(item.id)}
+          />
+        )}
+        contentContainerClassName="gap-5 px-4 pb-32"
+        initialNumToRender={2}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        removeClippedSubviews
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor="#ffffff"
+          />
+        }
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          loading ? (
+            <StreamSkeleton />
+          ) : error ? (
+            <ErrorNotice message={error} />
+          ) : (
+            <Text className="py-20 text-center text-sm text-muted">Ingen innlegg ennå.</Text>
+          )
+        }
+      />
+
+      {commentsFor && selfId ? (
+        <CommentSheet
+          postId={commentsFor}
+          selfId={selfId}
+          visible
+          onClose={() => {
+            setCommentsFor(null);
+            // The count on the card is stale the moment a comment is added or
+            // removed, and nothing else tells the stream it changed.
+            if (selfId) {
+              void fetchPostSocialCounts(
+                posts.map((post) => post.id),
+                selfId
+              )
+                .then(setSocial)
+                .catch(() => {});
+            }
           }}
-          tintColor="#ffffff"
         />
-      }
-      ListHeaderComponent={header}
-      ListEmptyComponent={
-        loading ? (
-          <StreamSkeleton />
-        ) : error ? (
-          <ErrorNotice message={error} />
-        ) : (
-          <Text className="py-20 text-center text-sm text-muted">Ingen innlegg ennå.</Text>
-        )
-      }
-    />
+      ) : null}
+
+      {likersFor ? (
+        <PeopleSheet
+          postId={likersFor}
+          initialMode="likes"
+          // Viewer lists stay in the album, where the post's author is known.
+          canSeeViews={false}
+          visible
+          onClose={() => setLikersFor(null)}
+        />
+      ) : null}
+    </>
   );
 }

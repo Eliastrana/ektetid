@@ -41,6 +41,52 @@ export async function fetchLikes(postId: string, selfId: string): Promise<LikeSt
   return { count: count ?? 0, likedByMe: !!mine.data };
 }
 
+/** Hearts and comment counts for a whole screen of posts. */
+export type PostSocialCounts = {
+  likes: number;
+  likedByMe: boolean;
+  comments: number;
+};
+
+/**
+ * Social counts for many posts at once.
+ *
+ * Three queries for the whole feed rather than three per post: a stream of
+ * eighty would otherwise open two hundred and forty round trips to draw a row
+ * of hearts. Rows are counted here instead of asking Postgres for a count per
+ * post, since PostgREST has no grouped count and the ids are already in hand.
+ */
+export async function fetchPostSocialCounts(
+  postIds: string[],
+  selfId: string
+): Promise<Map<string, PostSocialCounts>> {
+  const counts = new Map<string, PostSocialCounts>();
+  if (postIds.length === 0) return counts;
+
+  for (const id of postIds) counts.set(id, { likes: 0, likedByMe: false, comments: 0 });
+
+  const [likes, mine, comments] = await Promise.all([
+    supabase.from('likes').select('post_id').in('post_id', postIds),
+    supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', selfId),
+    supabase.from('comments').select('post_id').in('post_id', postIds),
+  ]);
+
+  for (const row of likes.data ?? []) {
+    const entry = counts.get(row.post_id);
+    if (entry) entry.likes += 1;
+  }
+  for (const row of mine.data ?? []) {
+    const entry = counts.get(row.post_id);
+    if (entry) entry.likedByMe = true;
+  }
+  for (const row of comments.data ?? []) {
+    const entry = counts.get(row.post_id);
+    if (entry) entry.comments += 1;
+  }
+
+  return counts;
+}
+
 export async function fetchLikers(postId: string): Promise<Liker[]> {
   const { data, error } = await supabase
     .from('likes')
