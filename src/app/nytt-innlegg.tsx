@@ -22,6 +22,7 @@ import { Screen } from '@/components/screen';
 import { SelfieSlot } from '@/components/selfie-slot';
 import { ErrorNotice } from '@/components/error-notice';
 import { errorMessage } from '@/lib/errors';
+import { notePublishedPost } from '@/lib/review';
 import { exifCoordinates, type Coordinates } from '@/lib/geo';
 import { archivePublishedCapture } from '@/lib/local-archive';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
@@ -141,6 +142,10 @@ export default function NewPostScreen() {
       // Asked for here rather than on launch: iOS grants one prompt, and a
       // user who has just published has a reason to want the answer.
       void registerForPush(userId).catch(() => {});
+      // Counts this publish and, once the app has clearly stuck, asks for a
+      // rating. Deliberately not awaited: the post is done and the screen
+      // should close regardless.
+      void notePublishedPost();
 
       router.dismissTo('/');
     } catch (caught) {
@@ -280,9 +285,17 @@ export default function NewPostScreen() {
                     className={`flex-row items-center gap-1.5 rounded-full px-4 py-2 ${
                       selected ? 'bg-ink' : 'bg-glass'
                     }`}>
-                    <Text className={selected ? 'text-canvas' : 'text-ink'}>{album.title}</Text>
-                    {/* Marked because a shared album is someone else's, and
-                        posting into one is visible to their friends too. */}
+                    <Text className={selected ? 'text-canvas' : 'text-ink'}>
+                      {album.title}
+                      {/* Named, not just marked: two people can call an album
+                          the same thing, and posting into the wrong one shows
+                          the photo to the wrong set of friends. */}
+                      {album.shared && album.ownerName ? (
+                        <Text className={selected ? 'text-canvas opacity-70' : 'text-muted'}>
+                          {`  ${album.ownerName}`}
+                        </Text>
+                      ) : null}
+                    </Text>
                     {album.shared ? (
                       <SymbolView
                         name="person.2.fill"

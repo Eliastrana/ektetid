@@ -143,6 +143,12 @@ export type WritableAlbum = {
   updated_at: string;
   /** Someone else owns this one and added you to it. */
   shared: boolean;
+  /**
+   * Who the album belongs to, for shared ones only. Posting into someone
+   * else's album is visible to their friends, so the destination has to say
+   * whose it is — a title alone gives no way to tell two people's albums apart.
+   */
+  ownerName: string | null;
 };
 
 /**
@@ -162,22 +168,44 @@ export type WritableAlbum = {
 export async function listWritableAlbums(userId: string): Promise<WritableAlbum[]> {
   const [owned, joined] = await Promise.all([
     supabase.from('albums').select('id, title, updated_at').eq('owner_id', userId),
-    supabase.from('album_members').select('albums (id, title, updated_at)').eq('user_id', userId),
+    supabase
+      .from('album_members')
+      .select('albums (id, title, updated_at, owner:profiles!albums_owner_id_fkey (username, display_name))')
+      .eq('user_id', userId),
   ]);
 
   if (owned.error) throw owned.error;
   if (joined.error) throw joined.error;
 
-  const albums: WritableAlbum[] = (owned.data ?? []).map((album) => ({ ...album, shared: false }));
+  const albums: WritableAlbum[] = (owned.data ?? []).map((album) => ({
+    ...album,
+    shared: false,
+    ownerName: null,
+  }));
   const seen = new Set(albums.map((album) => album.id));
 
   for (const row of joined.data ?? []) {
     // An album the user both owns and is a member of would otherwise appear
     // twice, and React would warn about the duplicate key.
-    const album = row.albums as { id: string; title: string; updated_at: string } | null;
+    const album = row.albums as
+      | {
+          id: string;
+          title: string;
+          updated_at: string;
+          owner: { username: string | null; display_name: string | null } | null;
+        }
+      | null;
     if (!album || seen.has(album.id)) continue;
     seen.add(album.id);
-    albums.push({ ...album, shared: true });
+    const { owner, ...rest } = album;
+    albums.push({
+      ...rest,
+      shared: true,
+      // Prefer the chosen display name, fall back to the handle: one or the
+      // other is always set, and an album labelled with neither is worse than
+      // one labelled with the less friendly of the two.
+      ownerName: owner?.display_name?.trim() || owner?.username || null,
+    });
   }
 
   return albums.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
