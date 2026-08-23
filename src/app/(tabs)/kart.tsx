@@ -18,7 +18,7 @@ import {
   type MapFilter,
   type MapRegion,
 } from '@/lib/map';
-import { PinFactory } from '@/components/pin-factory';
+import { countIconId, PinFactory } from '@/components/pin-factory';
 import type { ImageRef } from 'expo-image';
 
 const FILTERS: { value: MapFilter; label: string }[] = [
@@ -198,6 +198,15 @@ export default function MapScreen() {
     [clusters]
   );
 
+  /**
+   * The distinct sizes on screen. Every cluster of four is the same drawing, so
+   * the factory captures one and all four-post bubbles share it.
+   */
+  const counts = useMemo(
+    () => [...new Set(groups.map((cluster) => cluster.posts.length))],
+    [groups]
+  );
+
   // Sign thumbnails for what is on screen now. Panning somewhere new fetches
   // that place's photos rather than leaving them as fallback glyphs forever.
   //
@@ -297,14 +306,19 @@ export default function MapScreen() {
       // A cell holding several posts is drawn as its count. Annotations take
       // text and a background directly, so a bubble needs no captured image —
       // which is also why zooming out stays cheap however dense the map gets.
-      ...groups.map((cluster) => ({
-        id: `cluster:${cluster.id}`,
-        coordinates: { latitude: cluster.latitude, longitude: cluster.longitude },
-        title: `${cluster.posts.length} øyeblikk`,
-        text: String(cluster.posts.length),
-        backgroundColor: '#111111',
-        textColor: '#ffffff',
-      })),
+      ...groups.flatMap((cluster) => {
+        const icon = icons.get(countIconId(cluster.posts.length));
+        if (!icon) return [];
+
+        return [
+          {
+            id: `cluster:${cluster.id}`,
+            coordinates: { latitude: cluster.latitude, longitude: cluster.longitude },
+            title: `${cluster.posts.length} øyeblikk`,
+            icon,
+          },
+        ];
+      }),
       ...singles.flatMap((post) => {
         const icon = icons.get(post.id);
         if (!icon) return [];
@@ -328,8 +342,21 @@ export default function MapScreen() {
    * black annotation artifacts that appeared before a photo icon was ready.
    */
   const markers = useMemo(
-    () =>
-      singles.flatMap((post) => {
+    () => [
+      ...groups.flatMap((cluster) => {
+        if (icons.has(countIconId(cluster.posts.length))) return [];
+
+        return [
+          {
+            id: `cluster:${cluster.id}`,
+            coordinates: { latitude: cluster.latitude, longitude: cluster.longitude },
+            title: `${cluster.posts.length} øyeblikk`,
+            systemImage: 'photo.on.rectangle.angled',
+            tintColor: '#111111',
+          },
+        ];
+      }),
+      ...singles.flatMap((post) => {
         if (icons.has(post.id)) return [];
 
         return [
@@ -342,7 +369,8 @@ export default function MapScreen() {
           },
         ];
       }),
-    [icons, singles]
+    ],
+    [groups, icons, singles]
   );
 
   // expo-maps has no map on the simulator and no Apple Maps on Android.
@@ -358,7 +386,7 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <PinFactory posts={singles} onReady={setIcons} />
+      <PinFactory posts={singles} counts={counts} onReady={setIcons} />
 
       {region ? (
         <AppleMaps.View
@@ -376,7 +404,14 @@ export default function MapScreen() {
           uiSettings={{ compassEnabled: false, scaleBarEnabled: false }}
           properties={{ isMyLocationEnabled: true }}
           onMarkerClick={(marker) => {
-            setSelectedId(marker.id ?? null);
+            // Clusters appear here too while their numbered pin is still being
+            // captured, and must zoom rather than select a post that is not one.
+            const id = marker.id ?? null;
+            if (id?.startsWith('cluster:')) {
+              openCluster(id.slice('cluster:'.length));
+              return;
+            }
+            setSelectedId(id);
           }}
           onAnnotationClick={(annotation) => {
             const id = annotation.id ?? null;

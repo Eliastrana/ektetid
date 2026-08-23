@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 /** Diameter of the circular photo, in points. */
 export const PIN_DIAMETER = 52;
@@ -21,8 +21,8 @@ export const PIN_WIDTH = PIN_SIZE;
 export const PIN_HEIGHT = PIN_SIZE;
 
 /**
- * The pin as it will be captured: a circular photo, a white ring, and a tail
- * pointing at the coordinate.
+ * The pin's shell: white ring, dark well, and a tail pointing at the
+ * coordinate.
  *
  * Apple Maps replaces its own pin with whatever icon it is given, so the pin
  * has to be drawn here and handed over as a finished image. The tail matters
@@ -30,17 +30,13 @@ export const PIN_HEIGHT = PIN_SIZE;
  * the map, and a floating circle reads as hovering somewhere near the place
  * rather than marking it.
  *
+ * Shared by the photo and count pins so a group of moments sits in the same
+ * frame as a single one: zooming out should look like photos gathering up,
+ * not like a different kind of marker taking over.
+ *
  * Rendered offscreen and captured, never shown to the user directly.
  */
-export function PhotoPin({
-  uri,
-  onLoaded,
-  onError,
-}: {
-  uri: string;
-  onLoaded?: () => void;
-  onError?: () => void;
-}) {
+function PinFrame({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ width: PIN_WIDTH, height: PIN_HEIGHT, alignItems: 'center' }}>
       {/*
@@ -73,23 +69,70 @@ export function PhotoPin({
           borderColor: '#ffffff',
           overflow: 'hidden',
           backgroundColor: '#000000',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}>
-        <Image
-          source={{ uri }}
-          style={{ width: '100%', height: '100%' }}
-          cachePolicy="memory-disk"
-          allowDownscaling
-          enforceEarlyResizing
-          priority="high"
-          contentFit="cover"
-          // onLoad only fires after a successful decode. PinFactory allows one
-          // render frame before capture so the offscreen host has painted it.
-          onLoad={onLoaded}
-          onError={onError}
-          // No fade — a transition mid-capture bakes a half-faded photo in.
-          transition={0}
-        />
+        {children}
       </View>
     </View>
+  );
+}
+
+/** A single moment: its photo, filling the well. */
+export function PhotoPin({
+  uri,
+  onLoaded,
+  onError,
+}: {
+  uri: string;
+  onLoaded?: () => void;
+  onError?: () => void;
+}) {
+  return (
+    <PinFrame>
+      <Image
+        source={{ uri }}
+        style={{ width: '100%', height: '100%' }}
+        cachePolicy="memory-disk"
+        allowDownscaling
+        enforceEarlyResizing
+        priority="high"
+        contentFit="cover"
+        // onLoad only fires after a successful decode. PinFactory allows one
+        // render frame before capture so the offscreen host has painted it.
+        onLoad={onLoaded}
+        onError={onError}
+        // No fade — a transition mid-capture bakes a half-faded photo in.
+        transition={0}
+      />
+    </PinFrame>
+  );
+}
+
+/**
+ * Several moments gathered into one place, shown as their count.
+ *
+ * Long counts shrink rather than overflow: three digits at the single-digit
+ * size push against the ring, and a clipped number is worse than a small one.
+ */
+export function CountPin({ count }: { count: number }) {
+  const label = count > 999 ? '999+' : String(count);
+  const size = label.length >= 4 ? 15 : label.length === 3 ? 18 : 22;
+
+  return (
+    <PinFrame>
+      <Text
+        style={{
+          color: '#ffffff',
+          fontSize: size,
+          fontWeight: '600',
+          // Centres the glyphs in the well: the default line box leaves digits
+          // sitting slightly high inside a circle this small.
+          lineHeight: size + 2,
+          textAlign: 'center',
+        }}>
+        {label}
+      </Text>
+    </PinFrame>
   );
 }
