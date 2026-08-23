@@ -478,7 +478,20 @@ export default function MapScreen() {
             className="mx-5 mb-16">
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push(`/album/${selected.albumId}`)}
+              onPress={() =>
+                router.push({
+                  pathname: '/album/[id]',
+                  params: {
+                    id: selected.albumId,
+                    // The album opens on the pin that was tapped. Without this
+                    // it started at the album's first post, so choosing a place
+                    // on the map showed a different one.
+                    post: selected.id,
+                    ...(selected.imageUrl ? { cover: selected.imageUrl } : {}),
+                    ...(selected.blurhash ? { cb: selected.blurhash } : {}),
+                  },
+                })
+              }
               className="flex-row items-center gap-3 rounded-tile bg-surface p-3 active:opacity-80">
               {selected.imageUrl ? (
                 <Image
