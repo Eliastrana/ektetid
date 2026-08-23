@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 
 import { AlbumCard } from '@/components/album-card';
+import { FriendSuggestions } from '@/components/friend-suggestions';
 import { useAuth } from '@/components/auth-provider';
 import { PostStream } from '@/components/post-stream';
 import { Screen } from '@/components/screen';
@@ -111,12 +112,17 @@ export default function FeedScreen() {
   };
 
   const header = (
-    <FeedHeader
-      view={view}
-      viewerPro={viewerPro}
-      onProPress={openPro}
-      onToggle={toggleView}
-    />
+    <>
+      <FeedHeader
+        view={view}
+        viewerPro={viewerPro}
+        onProPress={openPro}
+        onToggle={toggleView}
+      />
+      {/* Someone with a handful of friends sees a thin feed and reads it as an
+          empty app. Suggestions sit where that gap is felt. */}
+      <FriendSuggestions />
+    </>
   );
 
   return (
@@ -151,6 +157,19 @@ export default function FeedScreen() {
                       ? 'Dra ned for å prøve igjen.'
                       : 'Ta ditt første bilde, eller legg til en venn.'}
                   </Text>
+                  {/* Telling a new account to add friends without a way to get
+                      there left the instruction to be acted on from memory. */}
+                  {error ? null : (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        router.push('/venner');
+                      }}
+                      className="mt-4 rounded-full bg-ink px-5 py-3 active:opacity-80">
+                      <Text className="text-sm text-canvas">Finn venner</Text>
+                    </Pressable>
+                  )}
                 </View>
               )
             }
