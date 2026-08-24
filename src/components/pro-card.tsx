@@ -8,10 +8,10 @@ import {
   type Purchase,
   type UseIAPOptions,
 } from 'expo-iap';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { ErrorNotice } from '@/components/error-notice';
 import {
   fetchProProgress,
@@ -372,7 +372,7 @@ type ProFeatureIcon =
 function ProFeature({ icon, label }: { icon: ProFeatureIcon; label: string }) {
   return (
     <View className="flex-row items-center gap-2.5">
-      <SymbolView
+      <Icon
         name={icon}
         size={13}
         tintColor="#ffffff"

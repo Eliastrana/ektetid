@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { Avatar } from '@/components/avatar';
 import { pickAvatar, removeAvatar, uploadAvatar } from '@/lib/avatar';
 import { errorMessage } from '@/lib/errors';
@@ -88,7 +88,7 @@ export function AvatarPicker({ userId, avatarUrl, name, pro = false, onChanged }
 
       {!busy ? (
         <View className="absolute -bottom-0.5 -right-0.5 h-6 w-6 items-center justify-center rounded-full border-2 border-canvas bg-ink">
-          <SymbolView
+          <Icon
             name={avatarUrl ? 'pencil' : 'plus'}
             size={11}
             tintColor="#000000"

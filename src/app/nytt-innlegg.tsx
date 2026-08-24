@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { registerForPush } from '@/lib/notifications';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
@@ -17,6 +16,7 @@ import {
   View,
 } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { SelfieSlot } from '@/components/selfie-slot';
@@ -297,7 +297,7 @@ export default function NewPostScreen() {
                       ) : null}
                     </Text>
                     {album.shared ? (
-                      <SymbolView
+                      <Icon
                         name="person.2.fill"
                         size={11}
                         tintColor={selected ? '#000000' : '#b0b4ba'}

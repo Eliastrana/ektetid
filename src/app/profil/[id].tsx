@@ -1,9 +1,9 @@
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { AlbumCard } from '@/components/album-card';
 import { ErrorNotice } from '@/components/error-notice';
 import { AlbumGridSkeleton } from '@/components/skeleton';
@@ -112,7 +112,7 @@ export default function PublicProfileScreen() {
                     onPress={() => setReportTarget({ reportedUserId: profile.id })}
                     hitSlop={10}
                     className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-                    <SymbolView
+                    <Icon
                       name="ellipsis"
                       size={18}
                       tintColor="#ffffff"

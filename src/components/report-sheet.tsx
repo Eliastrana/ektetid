@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { BottomSheet } from '@/components/bottom-sheet';
 import { Screen } from '@/components/screen';
 import { ErrorNotice } from '@/components/error-notice';
@@ -58,7 +58,7 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
             accessibilityLabel="Lukk"
             onPress={onClose}
             className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-            <SymbolView
+            <Icon
               name="xmark"
               size={15}
               tintColor="#ffffff"
@@ -110,7 +110,7 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
           <View
             className={`h-6 w-6 items-center justify-center rounded-md ${alsoBlock ? 'bg-ink' : 'bg-glass-strong'}`}>
             {alsoBlock ? (
-              <SymbolView
+              <Icon
                 name="checkmark"
                 size={14}
                 tintColor="#000000"

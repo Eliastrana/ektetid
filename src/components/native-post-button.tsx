@@ -1,6 +1,6 @@
-import { SymbolView } from 'expo-symbols';
 import { Pressable, Text } from 'react-native';
 import type { SFSymbol } from 'sf-symbols-typescript';
+import { Icon } from '@/components/icon';
 
 export type NativePostButtonProps = {
   label: string;
@@ -52,7 +52,7 @@ export function NativePostButton({
         paddingRight: contentAlignment === 'trailing' ? contentInset : 0,
       }}>
       {systemImage ? (
-        <SymbolView name={systemImage} size={20} tintColor={foregroundColor ?? tintColor} />
+        <Icon name={systemImage} size={20} tintColor={foregroundColor ?? tintColor} />
       ) : (
         <Text style={{ color: foregroundColor ?? tintColor, fontSize: 16, fontWeight: '600' }}>
           {displayLabel ?? label}

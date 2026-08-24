@@ -1,8 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { AlbumCard } from '@/components/album-card';
 import { AvatarPicker } from '@/components/avatar-picker';
 import { NativePostButton } from '@/components/native-post-button';
@@ -128,7 +128,7 @@ export default function ProfileScreen() {
                   onPress={() => router.push('/minneblikk')}
                   className="mt-3 h-16 flex-row items-center gap-3 rounded-tile bg-glass px-4 active:bg-glass-strong">
                   <View className="h-9 w-9 items-center justify-center rounded-full bg-glass-strong">
-                    <SymbolView
+                    <Icon
                       name="clock.arrow.circlepath"
                       size={16}
                       tintColor="#ffffff"
@@ -139,7 +139,7 @@ export default function ProfileScreen() {
                     <Text className="text-base text-ink">Minneblikk</Text>
                     <Text className="text-xs text-muted">Denne dagen og dine oppsummeringer</Text>
                   </View>
-                  <SymbolView
+                  <Icon
                     name="chevron.right"
                     size={14}
                     tintColor="#6b6f76"
@@ -155,7 +155,7 @@ export default function ProfileScreen() {
                 <Text className="text-base text-ink">Venner</Text>
                 <View className="flex-row items-center gap-2">
                   <Text className="text-base text-muted">{stats?.friends ?? 0}</Text>
-                  <SymbolView
+                  <Icon
                     name="chevron.right"
                     size={14}
                     tintColor="#6b6f76"

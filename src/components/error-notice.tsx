@@ -1,5 +1,5 @@
-import { SymbolView } from 'expo-symbols';
 import { Text, View } from 'react-native';
+import { Icon } from '@/components/icon';
 
 /**
  * A human-facing error state, deliberately separate from raw developer output.
@@ -12,7 +12,7 @@ export function ErrorNotice({ message }: { message: string }) {
       accessible
       accessibilityRole="alert"
       className="flex-row items-start gap-3 rounded-tile bg-surface-raised px-4 py-3">
-      <SymbolView
+      <Icon
         name="exclamationmark.triangle.fill"
         size={17}
         tintColor="#ffcc00"

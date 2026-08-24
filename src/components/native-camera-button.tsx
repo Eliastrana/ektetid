@@ -1,6 +1,6 @@
-import { SymbolView } from 'expo-symbols';
 import { Pressable, Text } from 'react-native';
 import type { SFSymbol } from 'sf-symbols-typescript';
+import { Icon } from '@/components/icon';
 
 export type NativeCameraButtonProps = {
   label: string;
@@ -28,7 +28,7 @@ export function NativeCameraButton({
       className={`h-14 w-14 items-center justify-center rounded-full bg-overlay active:bg-overlay-strong ${
         disabled ? 'opacity-40' : ''
       }`}>
-      <SymbolView
+      <Icon
         name={systemImage}
         size={26}
         tintColor={active ? '#ffd60a' : '#ffffff'}

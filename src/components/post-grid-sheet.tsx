@@ -1,9 +1,9 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { useMemo } from 'react';
 import { Dimensions, FlatList, Modal, Pressable, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
 import type { AlbumPost } from '@/lib/album';
 
@@ -52,7 +52,7 @@ export function PostGridSheet({
               accessibilityLabel="Lukk oversikten"
               onPress={onClose}
               className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-              <SymbolView
+              <Icon
                 name="xmark"
                 size={15}
                 tintColor="#ffffff"
@@ -102,7 +102,7 @@ export function PostGridSheet({
                   {/* A video is indistinguishable from a photo at this size. */}
                   {item.video_path ? (
                     <View className="absolute bottom-1 right-1">
-                      <SymbolView
+                      <Icon
                         name="play.fill"
                         size={11}
                         tintColor="#ffffff"

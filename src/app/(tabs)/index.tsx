@@ -2,8 +2,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 
+import { Icon } from '@/components/icon';
 import { AlbumCard } from '@/components/album-card';
 import { FriendSuggestions } from '@/components/friend-suggestions';
 import { useAuth } from '@/components/auth-provider';
@@ -55,7 +55,7 @@ function FeedHeader({
           onPress={onToggle}
           hitSlop={8}
           className="h-10 w-10 items-center justify-center rounded-full bg-glass active:bg-glass-strong">
-          <SymbolView
+          <Icon
             name={view === 'albums' ? 'rectangle.stack.fill' : 'square.grid.2x2.fill'}
             size={17}
             tintColor="#ffffff"

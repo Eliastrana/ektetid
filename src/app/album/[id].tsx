@@ -1,7 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,6 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
 import { NativePostButton } from '@/components/native-post-button';
@@ -886,7 +886,7 @@ export default function AlbumScreen() {
           style={burstStyle}
           pointerEvents="none"
           className="absolute inset-0 items-center justify-center">
-          <SymbolView
+          <Icon
             name="heart.fill"
             size={120}
             tintColor="#ffffff"

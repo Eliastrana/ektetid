@@ -1,11 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import type { ReactElement } from 'react';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { Avatar } from '@/components/avatar';
 import { CommentSheet } from '@/components/comment-sheet';
@@ -81,13 +81,13 @@ function PostCard({
           {item.video_path ? (
             <View className="absolute inset-0 items-center justify-center">
               <View className="h-14 w-14 items-center justify-center rounded-full bg-overlay-strong">
-                <SymbolView name="play.fill" size={24} tintColor="#ffffff" />
+                <Icon name="play.fill" size={24} tintColor="#ffffff" />
               </View>
             </View>
           ) : null}
           {item.rating ? (
             <View className="absolute right-3 top-3 flex-row items-center gap-1.5 rounded-full bg-overlay-strong px-3 py-2">
-              <SymbolView
+              <Icon
                 name={`die.face.${item.rating}.fill` as 'die.face.1.fill'}
                 size={16}
                 tintColor="#ffffff"
@@ -136,7 +136,7 @@ function PostCard({
             accessibilityLabel={social.likedByMe ? 'Fjern hjerte' : 'Gi hjerte'}
             onPress={onToggleLike}
             className="flex-row items-center gap-2 active:opacity-60">
-            <SymbolView
+            <Icon
               name={social.likedByMe ? 'heart.fill' : 'heart'}
               size={20}
               tintColor={social.likedByMe ? '#ff3b30' : '#ffffff'}
@@ -152,7 +152,7 @@ function PostCard({
             accessibilityLabel="Kommentarer"
             onPress={onComment}
             className="flex-row items-center gap-2 active:opacity-60">
-            <SymbolView
+            <Icon
               name="bubble.left"
               size={20}
               tintColor="#ffffff"

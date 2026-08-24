@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import { FlatList, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 
@@ -64,7 +64,7 @@ export default function OnboardingScreen() {
           renderItem={({ item }) => (
             <View style={{ width }} className="flex-1 items-center justify-center px-10">
               <View className="h-28 w-28 items-center justify-center rounded-[32px] bg-glass">
-                <SymbolView name={item.icon} size={48} tintColor="#ffffff" />
+                <Icon name={item.icon} size={48} tintColor="#ffffff" />
               </View>
               <Text className="mt-10 text-center text-4xl text-ink">{item.title}</Text>
               <Text className="mt-4 text-center text-base leading-6 text-muted">{item.body}</Text>

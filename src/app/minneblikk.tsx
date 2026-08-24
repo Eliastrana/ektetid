@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { ErrorNotice } from '@/components/error-notice';
 import { Screen } from '@/components/screen';
@@ -74,7 +74,7 @@ export default function MemoriesScreen() {
           contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36 }}>
           <View className="mb-5 flex-row items-center gap-3">
             <View className="h-11 w-11 items-center justify-center rounded-full bg-glass-strong">
-              <SymbolView
+              <Icon
                 name="clock.arrow.circlepath"
                 size={20}
                 tintColor="#ffffff"

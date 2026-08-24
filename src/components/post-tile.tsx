@@ -1,5 +1,4 @@
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
@@ -11,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { AlbumPost } from '@/lib/album';
+import { Icon } from '@/components/icon';
 
 type Props = {
   post: AlbumPost;
@@ -180,7 +180,7 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
             width: SELFIE_COLLAPSED.width,
             height: SELFIE_COLLAPSED.width,
           }}>
-          <SymbolView
+          <Icon
             name={`die.face.${post.rating}.fill` as 'die.face.1.fill'}
             size={SELFIE_COLLAPSED.width}
             tintColor="#ffffff"

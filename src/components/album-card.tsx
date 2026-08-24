@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
 
+import { Icon } from '@/components/icon';
 import { Avatar } from '@/components/avatar';
 import { Scrim } from '@/components/scrim';
 import { albumCoverLayout } from '@/lib/album-customization';
@@ -164,7 +164,7 @@ export function AlbumCard({
               </Text>
               {album.shared && !isOwn ? (
                 <View className="flex-row items-center gap-1 rounded-full bg-glass-strong px-1.5 py-0.5">
-                  <SymbolView
+                  <Icon
                     name="person.2.fill"
                     size={9}
                     tintColor="#ffffff"

@@ -1,10 +1,10 @@
 import { Host, TextInput as NativeTextInput, useNativeState } from '@expo/ui';
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon } from '@/components/icon';
 import { Avatar } from '@/components/avatar';
 import { BottomSheet } from '@/components/bottom-sheet';
 import { NativePostButton } from '@/components/native-post-button';
@@ -191,7 +191,7 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                 className="items-center py-12"
                 accessible
                 accessibilityLabel="Ingen kommentarer ennå">
-                <SymbolView
+                <Icon
                   name="message"
                   size={38}
                   tintColor="#3a3d42"
@@ -227,7 +227,7 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
                     }
                     onPress={() => void likeComment(item)}
                     className="flex-row items-center gap-1 py-1">
-                    <SymbolView
+                    <Icon
                       name={item.likedByMe ? 'heart.fill' : 'heart'}
                       size={13}
                       tintColor={item.likedByMe ? '#ff3b30' : '#b0b4ba'}

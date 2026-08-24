@@ -1,9 +1,9 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { Screen } from '@/components/screen';
 import { ProCard } from '@/components/pro-card';
@@ -112,7 +112,7 @@ export default function SettingsScreen() {
                 <Text className="text-xs text-muted">Passord</Text>
                 <Text className="text-base text-ink">Velg et passord</Text>
               </View>
-              <SymbolView
+              <Icon
                 name="chevron.right"
                 size={14}
                 tintColor="#6b6f76"

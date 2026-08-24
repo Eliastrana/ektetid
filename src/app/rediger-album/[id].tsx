@@ -1,7 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
 import ReorderableList, {
@@ -10,6 +9,7 @@ import ReorderableList, {
   type ReorderableListReorderEvent,
 } from 'react-native-reorderable-list';
 
+import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { ErrorNotice } from '@/components/error-notice';
 import { NativePostButton } from '@/components/native-post-button';
@@ -596,7 +596,7 @@ function PostRow({
           />
           {isCover ? (
             <View className="absolute right-1 top-1 h-5 w-5 items-center justify-center rounded-full bg-ink">
-              <SymbolView
+              <Icon
                 name="checkmark"
                 size={10}
                 tintColor="#000000"
@@ -652,7 +652,7 @@ function PostRow({
         onPress={onDelete}
         hitSlop={6}
         className="h-9 w-9 items-center justify-center rounded-full active:bg-glass-strong">
-        <SymbolView
+        <Icon
           name="trash"
           size={15}
           tintColor="#ff3b30"
@@ -677,7 +677,7 @@ function PostRow({
         delayLongPress={180}
         hitSlop={8}
         className="h-9 w-9 items-center justify-center rounded-full active:bg-glass-strong">
-        <SymbolView
+        <Icon
           name="line.3.horizontal"
           size={16}
           tintColor="#b0b4ba"

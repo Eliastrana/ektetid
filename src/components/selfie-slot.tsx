@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { SymbolView } from 'expo-symbols';
 import { Alert, Pressable, Text, View } from 'react-native';
+import { Icon } from '@/components/icon';
 
 type Props = {
   uri: string | null;
@@ -74,7 +74,7 @@ export function SelfieSlot({ uri, onChange }: Props) {
           <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
         ) : (
           <View className="items-center gap-1.5 px-2">
-            <SymbolView
+            <Icon
               name="person.crop.square"
               size={22}
               tintColor="#b0b4ba"
@@ -89,7 +89,7 @@ export function SelfieSlot({ uri, onChange }: Props) {
 
       {uri ? (
         <View className="absolute -bottom-1 -right-1 h-6 w-6 items-center justify-center rounded-full border-2 border-canvas bg-ink">
-          <SymbolView
+          <Icon
             name="pencil"
             size={11}
             tintColor="#000000"
