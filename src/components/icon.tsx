@@ -12,7 +12,7 @@ import type { SFSymbol } from 'sf-symbols-typescript';
  * Anything missing here still renders correctly on iOS and falls back
  * elsewhere, so an unmapped icon degrades rather than breaking.
  */
-const MATERIAL: Partial<Record<SFSymbol | (string & {}), AndroidSymbol>> = {
+const MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'arrow.triangle.2.circlepath.camera.fill': 'flip_camera_ios',
   'bubble.left': 'chat_bubble',
   'bubble.left.fill': 'chat_bubble',
@@ -48,7 +48,7 @@ const MATERIAL: Partial<Record<SFSymbol | (string & {}), AndroidSymbol>> = {
 };
 
 // Every die face is one Material glyph; the pip count has no equivalent.
-for (const face of [1, 2, 3, 4, 5, 6]) {
+for (const face of [1, 2, 3, 4, 5, 6] as const) {
   MATERIAL[`die.face.${face}.fill`] = 'casino';
 }
 
@@ -62,16 +62,12 @@ for (const face of [1, 2, 3, 4, 5, 6]) {
 export function Icon({
   name,
   ...rest
-}: Omit<SymbolViewProps, 'name'> & { name: SFSymbol | (string & {}) }) {
+}: Omit<SymbolViewProps, 'name'> & { name: SFSymbol }) {
   const material = MATERIAL[name];
 
   return (
     <SymbolView
-      name={
-        material
-          ? { ios: name as SFSymbol, android: material, web: material }
-          : (name as SFSymbol)
-      }
+      name={material ? { ios: name, android: material, web: material } : name}
       {...rest}
     />
   );
