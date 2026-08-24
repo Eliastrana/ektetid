@@ -1,8 +1,8 @@
 import type { Session } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
 import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import type { Profile } from '@/lib/database.types';
+import { secureStorage } from '@/lib/secure-storage';
 import { supabase } from '@/lib/supabase';
 
 /** Usernames handed out by the signup trigger, before the user picks their own. */
@@ -38,7 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOnboardingComplete(false);
       return;
     }
-    const stored = await SecureStore.getItemAsync(onboardingStorageKey(userId));
+    // Through the platform-split adapter, not expo-secure-store directly:
+    // there is no Keychain in a browser, and its web build throws on the first
+    // call rather than degrading — which crashed the whole web app on load.
+    const stored = await secureStorage.getItem(onboardingStorageKey(userId));
     setOnboardingComplete(stored === 'done');
   }, []);
 
@@ -87,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeOnboarding = useCallback(async () => {
     const userId = session?.user.id;
     if (!userId) return;
-    await SecureStore.setItemAsync(onboardingStorageKey(userId), 'done');
+    await secureStorage.setItem(onboardingStorageKey(userId), 'done');
     setOnboardingComplete(true);
   }, [session?.user.id]);
 

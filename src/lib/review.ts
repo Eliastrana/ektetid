@@ -1,5 +1,6 @@
-import * as SecureStore from 'expo-secure-store';
 import * as StoreReview from 'expo-store-review';
+
+import { secureStorage } from '@/lib/secure-storage';
 
 /**
  * Ask for an App Store rating, but only once and only after the app has earned
@@ -20,7 +21,7 @@ const ASK_AFTER_PUBLISHES = 5;
 
 async function read(key: string): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(key);
+    return await secureStorage.getItem(key);
   } catch {
     return null;
   }
@@ -28,7 +29,7 @@ async function read(key: string): Promise<string | null> {
 
 async function write(key: string, value: string): Promise<void> {
   try {
-    await SecureStore.setItemAsync(key, value);
+    await secureStorage.setItem(key, value);
   } catch {
     // A rating prompt is not worth surfacing a storage failure over.
   }
