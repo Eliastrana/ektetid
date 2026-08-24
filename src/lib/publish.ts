@@ -49,6 +49,55 @@ async function upload(
   return path;
 }
 
+/**
+ * Strip what Postgres will not accept inside jsonb.
+ *
+ * The exif column is jsonb, and jsonb cannot hold a NUL: Postgres rejects the
+ * whole insert with "unsupported Unicode escape sequence" (22P05). Android's
+ * camera routinely returns NUL-padded strings in tags like UserComment and the
+ * maker notes, so a perfectly good post failed to publish on the strength of
+ * metadata nobody reads. Unpaired surrogates are removed for the same reason —
+ * they survive JSON.stringify and then fail on the way into jsonb.
+ *
+ * Exif is decoration: dropping a tag is always better than losing the photo,
+ * so anything unrepresentable is discarded rather than escaped.
+ */
+function jsonbSafe(value: unknown, depth = 0): unknown {
+  if (depth > 8) return undefined;
+
+  if (typeof value === 'string') {
+    return value.replace(/\u0000/g, '').replace(/[\uD800-\uDFFF]/g, (char, index) => {
+      const code = char.charCodeAt(0);
+      const next = value.charCodeAt(index + 1);
+      const previous = value.charCodeAt(index - 1);
+      const paired =
+        (code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) ||
+        (code >= 0xdc00 && previous >= 0xd800 && previous <= 0xdbff);
+      return paired ? char : '';
+    });
+  }
+
+  // Infinity and NaN have no JSON form; both arrive from odd exif rationals.
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'boolean' || value === null) return value;
+
+  if (Array.isArray(value)) {
+    return value.map((item) => jsonbSafe(item, depth + 1)).filter((item) => item !== undefined);
+  }
+
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      const cleaned = jsonbSafe(item, depth + 1);
+      if (cleaned !== undefined) out[jsonbSafe(key, depth + 1) as string] = cleaned;
+    }
+    return out;
+  }
+
+  // Functions, symbols, undefined: nothing jsonb can represent.
+  return undefined;
+}
+
 export async function publishPost(
   input: PublishInput,
   onProgress?: (stage: PublishProgress) => void
@@ -106,7 +155,7 @@ export async function publishPost(
     p_description: input.description.trim() || undefined,
     p_location: input.location.trim() || undefined,
     p_taken_at: input.takenAt.toISOString(),
-    p_exif: (input.capture.exif ?? undefined) as never,
+    p_exif: (jsonbSafe(input.capture.exif) ?? undefined) as never,
     p_blurhash: image.blurhash,
     p_luminance: image.luminance,
     p_latitude: input.coordinates?.latitude ?? undefined,
