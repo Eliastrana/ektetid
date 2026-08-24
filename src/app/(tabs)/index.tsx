@@ -38,7 +38,12 @@ function FeedHeader({
       </View>
 
       <View className="mt-2 flex-row items-center gap-2">
-        {viewerPro !== null ? (
+        {/*
+          Off iOS there is nothing to buy — see pro-card-earned.tsx — so the
+          pill only reports Pro that has been earned. "Kjøp Pro" would lead to a
+          section with no way to buy anything.
+        */}
+        {viewerPro !== null && (viewerPro || process.env.EXPO_OS === 'ios') ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={viewerPro ? 'EkteTid Pro er aktiv' : 'Se EkteTid Pro'}
