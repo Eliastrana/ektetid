@@ -13,7 +13,12 @@ import type { SFSymbol } from 'sf-symbols-typescript';
  * elsewhere, so an unmapped icon degrades rather than breaking.
  */
 const MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
+  'arrow.down.forward.and.arrow.up.backward': 'close_fullscreen',
+  'arrow.up': 'arrow_upward',
+  'arrow.up.backward.and.arrow.down.forward': 'open_in_full',
   'arrow.triangle.2.circlepath.camera.fill': 'flip_camera_ios',
+  'bolt.badge.a': 'flash_auto',
+  'bolt.slash.fill': 'flash_off',
   'bubble.left': 'chat_bubble',
   'bubble.left.fill': 'chat_bubble',
   'camera.fill': 'photo_camera',
@@ -27,6 +32,7 @@ const MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   'eye.fill': 'visibility',
   'gearshape.fill': 'settings',
   heart: 'favorite',
+  hourglass: 'hourglass_empty',
   'heart.fill': 'favorite',
   'line.3.horizontal': 'menu',
   'map.fill': 'map',
@@ -41,6 +47,8 @@ const MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   plus: 'add',
   'rectangle.stack.fill': 'collections',
   'slider.horizontal.3': 'tune',
+  'speaker.slash.fill': 'volume_off',
+  'speaker.wave.2.fill': 'volume_up',
   'square.and.arrow.down': 'download',
   'square.grid.2x2.fill': 'grid_view',
   trash: 'delete',
@@ -64,6 +72,13 @@ export function Icon({
   ...rest
 }: Omit<SymbolViewProps, 'name'> & { name: SFSymbol }) {
   const material = MATERIAL[name];
+
+  if (__DEV__ && !material) {
+    // Off iOS an unmapped name renders the fallback, or nothing at all where
+    // there is none — silently. Saying so is the only way this gets noticed
+    // before someone reports a missing button.
+    console.warn(`Icon "${name}" has no Material mapping; it will not draw off iOS.`);
+  }
 
   return (
     <SymbolView
