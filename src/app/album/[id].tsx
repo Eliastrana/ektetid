@@ -743,13 +743,30 @@ export default function AlbumScreen() {
       <View className="flex-1 items-center justify-center gap-3 px-8">
         <Text className="text-base text-ink">{album.title}</Text>
         <Text className="text-sm text-muted">Dette albumet er tomt.</Text>
-        <NativePostButton
-          label="Tilbake"
-          displayLabel="Tilbake"
-          appearance="glass"
-          size={96}
-          onPress={dismiss}
-        />
+        <View className="flex-row items-center gap-3">
+          <NativePostButton
+            label="Tilbake"
+            displayLabel="Tilbake"
+            appearance="glass"
+            size={96}
+            onPress={dismiss}
+          />
+          {/*
+            An empty album has no chrome, so this was the one state its owner
+            could reach but not edit — and therefore could not delete. Routes to
+            the same screen the chrome does, rather than repeating the delete
+            confirmation here.
+          */}
+          {album.canEdit ? (
+            <NativePostButton
+              label="Rediger album"
+              displayLabel="Rediger"
+              appearance="glass"
+              size={96}
+              onPress={() => router.push(`/rediger-album/${album.id}`)}
+            />
+          ) : null}
+        </View>
       </View>
     );
   }
