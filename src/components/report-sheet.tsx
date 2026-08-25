@@ -96,7 +96,8 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
           selectionColor="#ffffff"
           multiline
           maxLength={1000}
-          className="mt-4 min-h-20 rounded-tile bg-glass px-4 py-3 text-base text-ink"
+          style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+          className="mt-4 min-h-20 rounded-tile bg-glass text-base text-ink"
         />
 
         <Pressable

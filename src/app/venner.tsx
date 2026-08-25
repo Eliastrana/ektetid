@@ -134,7 +134,8 @@ export default function FriendsScreen() {
             placeholder="Søk etter brukernavn"
             placeholderTextColor="#6b6f76"
             selectionColor="#ffffff"
-            className="h-12 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+            style={{ paddingHorizontal: 16 }}
+            className="h-12 rounded-tile bg-glass text-base leading-none text-ink"
           />
           {error ? (
             <View className="mt-3">

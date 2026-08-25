@@ -87,7 +87,7 @@ export default function EditPostScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#000000' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         className="flex-1"
         contentInsetAdjustmentBehavior="automatic"
@@ -100,7 +100,8 @@ export default function EditPostScreen() {
           placeholderTextColor="#6b6f76"
           selectionColor="#ffffff"
           maxLength={80}
-          className="h-14 rounded-tile bg-glass px-4 text-xl leading-none text-ink"
+          style={{ paddingHorizontal: 16 }}
+          className="h-14 rounded-tile bg-glass text-xl leading-none text-ink"
         />
         <TextInput
           value={description}
@@ -110,7 +111,8 @@ export default function EditPostScreen() {
           selectionColor="#ffffff"
           multiline
           maxLength={1000}
-          className="min-h-28 rounded-tile bg-glass px-4 py-3 text-base text-ink"
+          style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+          className="min-h-28 rounded-tile bg-glass text-base text-ink"
         />
         <TextInput
           value={location}
@@ -119,7 +121,8 @@ export default function EditPostScreen() {
           placeholderTextColor="#6b6f76"
           selectionColor="#ffffff"
           maxLength={80}
-          className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+          style={{ paddingHorizontal: 16 }}
+          className="h-14 rounded-tile bg-glass text-base leading-none text-ink"
         />
 
         <View className="rounded-tile bg-glass p-4">

@@ -65,7 +65,7 @@ export default function SignInScreen() {
     <View className="flex-1 bg-canvas">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Screen className="flex-1 justify-between px-6 py-4">
           <View className="mt-10">
             <Text className="text-7xl text-ink">EkteTid</Text>
@@ -136,7 +136,8 @@ export default function SignInScreen() {
                   placeholder="din@epost.no"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+                  style={{ paddingHorizontal: 16 }}
+                  className="h-14 rounded-tile bg-glass text-base leading-none text-ink"
                 />
                 <TextInput
                   value={password}
@@ -148,7 +149,8 @@ export default function SignInScreen() {
                   placeholder="Passord"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+                  style={{ paddingHorizontal: 16 }}
+                  className="h-14 rounded-tile bg-glass text-base leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"
@@ -216,7 +218,8 @@ export default function SignInScreen() {
                   placeholder="din@epost.no"
                   placeholderTextColor="#6b6f76"
                   selectionColor="#ffffff"
-                  className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+                  style={{ paddingHorizontal: 16 }}
+                  className="h-14 rounded-tile bg-glass text-base leading-none text-ink"
                 />
                 <Pressable
                   accessibilityRole="button"

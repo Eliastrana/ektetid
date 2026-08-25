@@ -65,7 +65,7 @@ export default function PasswordScreen() {
     <View className="flex-1 bg-canvas">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Screen className="flex-1" edges={['bottom']}>
           <View className="mt-8 flex-1 px-5">
             <Text className="mb-4 text-sm text-muted">
@@ -84,7 +84,8 @@ export default function PasswordScreen() {
               placeholder="Nytt passord"
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
-              className="h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+              style={{ paddingHorizontal: 16 }}
+              className="h-14 rounded-tile bg-glass text-base leading-none text-ink"
             />
             <TextInput
               value={repeat}
@@ -96,7 +97,8 @@ export default function PasswordScreen() {
               placeholder="Gjenta passordet"
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
-              className="mt-3 h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+              style={{ paddingHorizontal: 16 }}
+              className="mt-3 h-14 rounded-tile bg-glass text-base leading-none text-ink"
             />
 
             {/*

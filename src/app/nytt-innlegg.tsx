@@ -188,7 +188,7 @@ export default function NewPostScreen() {
     <View className="flex-1 bg-canvas">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Screen className="flex-1" edges={['bottom']}>
           <ScrollView className="flex-1 px-5" keyboardShouldPersistTaps="handled">
             <View className="mt-4 flex-row gap-3">
@@ -207,7 +207,8 @@ export default function NewPostScreen() {
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
               maxLength={80}
-              className="mt-5 h-14 rounded-tile bg-glass px-4 text-xl leading-none text-ink"
+              style={{ paddingHorizontal: 16 }}
+              className="mt-5 h-14 rounded-tile bg-glass text-xl leading-none text-ink"
             />
 
             <TextInput
@@ -218,7 +219,8 @@ export default function NewPostScreen() {
               selectionColor="#ffffff"
               multiline
               maxLength={1000}
-              className="mt-3 min-h-24 rounded-tile bg-glass px-4 py-3 text-base text-ink"
+              style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+              className="mt-3 min-h-24 rounded-tile bg-glass text-base text-ink"
             />
 
             <TextInput
@@ -228,7 +230,8 @@ export default function NewPostScreen() {
               placeholderTextColor="#6b6f76"
               selectionColor="#ffffff"
               maxLength={80}
-              className="mt-3 h-14 rounded-tile bg-glass px-4 text-base leading-none text-ink"
+              style={{ paddingHorizontal: 16 }}
+              className="mt-3 h-14 rounded-tile bg-glass text-base leading-none text-ink"
             />
 
             <View className="mt-3 rounded-tile bg-glass p-4">

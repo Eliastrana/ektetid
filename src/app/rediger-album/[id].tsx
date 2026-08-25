@@ -305,7 +305,8 @@ export default function EditAlbumScreen() {
                 maxLength={60}
                 placeholderTextColor="#6b6f76"
                 selectionColor="#ffffff"
-                className="h-14 rounded-tile bg-glass px-4 text-xl leading-none text-ink"
+                style={{ paddingHorizontal: 16 }}
+                className="h-14 rounded-tile bg-glass text-xl leading-none text-ink"
               />
 
               <Text className="mb-2 mt-4 text-sm text-muted">Beskrivelse</Text>
@@ -317,7 +318,8 @@ export default function EditAlbumScreen() {
                 placeholder="Vises under tittelen på albumet"
                 placeholderTextColor="#6b6f76"
                 selectionColor="#ffffff"
-                className="min-h-20 rounded-tile bg-glass px-4 py-3 text-base text-ink"
+                style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+                className="min-h-20 rounded-tile bg-glass text-base text-ink"
               />
 
               {album.isOwner ? (

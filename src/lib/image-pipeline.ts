@@ -28,11 +28,20 @@ export type ProcessedImage = {
   luminance: number;
 };
 
-function fit(width: number, height: number, maxEdge: number) {
-  const longest = Math.max(width, height);
-  if (longest <= maxEdge) return { width, height };
-  const scale = maxEdge / longest;
-  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+/**
+ * One axis to constrain, or null when the image is already small enough.
+ *
+ * Deliberately a single dimension. Passing both to resize means asserting the
+ * aspect ratio, and the camera's reported width and height cannot be trusted to
+ * describe the decoded pixels: Android stores a JPEG in sensor orientation with
+ * a rotation tag, so a portrait photo often arrives reporting landscape
+ * dimensions. Resizing to that pair squashed the photo. Constraining one axis
+ * lets the real bitmap keep its own proportions, and the worst a swapped pair
+ * can now cost is an image slightly larger than intended.
+ */
+function longestEdge(width: number, height: number, maxEdge: number) {
+  if (Math.max(width, height) <= maxEdge) return null;
+  return width >= height ? { width: maxEdge } : { height: maxEdge };
 }
 
 /**
@@ -41,7 +50,9 @@ function fit(width: number, height: number, maxEdge: number) {
  */
 async function probe(uri: string): Promise<{ blurhash: string; luminance: number }> {
   const context = ImageManipulator.manipulate(uri);
-  context.resize({ width: PROBE_EDGE, height: PROBE_EDGE });
+  // Width only: forcing a square here distorted the blurhash, which is then
+  // stretched back over the real aspect ratio as a placeholder.
+  context.resize({ width: PROBE_EDGE });
 
   const rendered = await context.renderAsync();
   const probeImage = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.9 });
@@ -76,10 +87,11 @@ export async function processImage(
   sourceWidth: number,
   sourceHeight: number
 ): Promise<ProcessedImage> {
-  const target = fit(sourceWidth, sourceHeight, MAX_EDGE);
+  const constraint = longestEdge(sourceWidth, sourceHeight, MAX_EDGE);
 
   const context = ImageManipulator.manipulate(uri);
-  context.resize(target);
+  // Already within bounds: re-encoding at the same size only loses quality.
+  if (constraint) context.resize(constraint);
   const rendered = await context.renderAsync();
   const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
 

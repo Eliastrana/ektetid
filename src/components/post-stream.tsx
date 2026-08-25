@@ -8,6 +8,7 @@ import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { Avatar } from '@/components/avatar';
+import { Dice } from '@/components/dice';
 import { CommentSheet } from '@/components/comment-sheet';
 import { PeopleSheet } from '@/components/people-sheet';
 import { ErrorNotice } from '@/components/error-notice';
@@ -87,11 +88,7 @@ function PostCard({
           ) : null}
           {item.rating ? (
             <View className="absolute right-3 top-3 flex-row items-center gap-1.5 rounded-full bg-overlay-strong px-3 py-2">
-              <Icon
-                name={`die.face.${item.rating}.fill` as 'die.face.1.fill'}
-                size={16}
-                tintColor="#ffffff"
-              />
+              <Dice face={item.rating} size={16} color="#ffffff" />
               <Text className="text-sm text-ink">{item.rating}</Text>
             </View>
           ) : null}

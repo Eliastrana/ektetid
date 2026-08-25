@@ -10,7 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { AlbumPost } from '@/lib/album';
-import { Icon } from '@/components/icon';
+import { Dice } from '@/components/dice';
 
 type Props = {
   post: AlbumPost;
@@ -180,12 +180,7 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
             width: SELFIE_COLLAPSED.width,
             height: SELFIE_COLLAPSED.width,
           }}>
-          <Icon
-            name={`die.face.${post.rating}.fill` as 'die.face.1.fill'}
-            size={SELFIE_COLLAPSED.width}
-            tintColor="#ffffff"
-            fallback={<Text className="text-5xl text-ink">⚄</Text>}
-          />
+          <Dice face={post.rating} size={SELFIE_COLLAPSED.width} color="#ffffff" />
         </View>
       ) : null}
 

@@ -55,11 +55,6 @@ const MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
   xmark: 'close',
 };
 
-// Every die face is one Material glyph; the pip count has no equivalent.
-for (const face of [1, 2, 3, 4, 5, 6] as const) {
-  MATERIAL[`die.face.${face}.fill`] = 'casino';
-}
-
 /**
  * An SF Symbol that also draws on Android and the web.
  *
