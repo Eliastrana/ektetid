@@ -27,8 +27,8 @@ type PendingPin = {
 type Props = {
   /** Posts drawn as their own photo. */
   posts: LocatedPost[];
-  /** Distinct cluster sizes needing a numbered pin. Empty when not clustering. */
-  counts?: number[];
+  /** Distinct cluster sizes needing a numbered pin. */
+  counts: number[];
   onReady: (icons: Map<string, ImageRef>) => void;
 };
 
@@ -43,7 +43,7 @@ export const countIconId = (count: number) => `count:${count}`;
  * host sits at a large negative offset rather than behind `opacity: 0` or
  * `display: none`: a view that is not actually laid out captures blank.
  */
-export function PinFactory({ posts, counts = [], onReady }: Props) {
+export function PinFactory({ posts, counts, onReady }: Props) {
   const [pending, setPending] = useState<PendingPin | null>(null);
   const hostRef = useRef<View>(null);
   const queue = useRef<PendingPin[]>([]);

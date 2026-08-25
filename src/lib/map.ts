@@ -205,8 +205,7 @@ export async function fetchLocatedPosts(
  */
 export async function hydrateLocatedPostImages(
   posts: LocatedPost[],
-  /** Defaults to every post, for callers that draw them all rather than cluster. */
-  wanted: LocatedPost[] = posts
+  wanted: LocatedPost[]
 ): Promise<LocatedPost[]> {
   const unsigned = wanted.filter((post) => !post.imageUrl).slice(0, MAX_MAP_PHOTO_PINS);
   if (unsigned.length === 0) return posts;
