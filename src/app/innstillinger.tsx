@@ -9,6 +9,11 @@ import { Screen } from '@/components/screen';
 import { ProCard } from '@/components/pro-card';
 import { signOut } from '@/lib/auth';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
+import {
+  chromeHidingNow,
+  loadChromeHiding,
+  setChromeHiding,
+} from '@/lib/chrome-hiding';
 import { isLocalArchiveEnabled, setLocalArchiveEnabled } from '@/lib/local-archive';
 import { deleteAccount } from '@/lib/moderation';
 import {
@@ -24,7 +29,20 @@ export default function SettingsScreen() {
   const [updatingLockScreen, setUpdatingLockScreen] = useState(false);
   const [isPro, setIsPro] = useState(false);
   const [localArchiveEnabled, setLocalArchiveEnabledState] = useState(false);
+  const [autoHideChrome, setAutoHideChrome] = useState(chromeHidingNow() === 'auto');
   const [updatingLocalArchive, setUpdatingLocalArchive] = useState(false);
+
+  // Not tied to the session: this one is about the device, not the account, so
+  // it loads whether or not anybody is signed in.
+  useEffect(() => {
+    let active = true;
+    void loadChromeHiding().then((value) => {
+      if (active) setAutoHideChrome(value === 'auto');
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const userId = session?.user.id;
@@ -199,6 +217,33 @@ export default function SettingsScreen() {
               </View>
             </>
           ) : null}
+
+          {/*
+            Not behind a platform check or a Pro check: this is about reading an
+            album, which every account does on every platform.
+          */}
+          <Text className="mb-2 mt-8 text-sm text-muted">Album</Text>
+          <View className="flex-row items-center rounded-tile bg-glass px-4 py-3">
+            <View className="flex-1 pr-4">
+              <Text className="text-base text-ink">Skjul kontroller automatisk</Text>
+              <Text className="mt-0.5 text-xs text-muted">
+                Knapper og tekst forsvinner av seg selv etter noen sekunder når
+                du ser på et album. Av blir de liggende.
+              </Text>
+            </View>
+            <Switch
+              value={autoHideChrome}
+              onValueChange={(enabled) => {
+                // Written without awaiting, and the switch moves regardless.
+                // The value is cached the moment it is set, so an album opened
+                // straight afterwards already reads the new one — a spinner
+                // here would be showing the Keychain, not the setting.
+                setAutoHideChrome(enabled);
+                void Haptics.selectionAsync();
+                void setChromeHiding(enabled ? 'auto' : 'manual');
+              }}
+            />
+          </View>
 
           <Text className="mb-2 mt-8 text-sm text-muted">Farlig område</Text>
           <Pressable

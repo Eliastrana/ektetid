@@ -12,6 +12,16 @@ export type NativePostButtonProps = {
   tintColor?: string;
   foregroundColor?: string;
   size?: number;
+  /**
+   * Accepted for parity with the iOS build, and deliberately unused.
+   *
+   * There the glass disc is sized from the label, so boxing the glyph is the
+   * only way to widen it. Here the circle is `size` outright and already the
+   * right size — applying the correction as well would apply it twice.
+   */
+  glyphBox?: number;
+  /** Put the value under the glyph instead of beside it, as on iOS. */
+  stackValue?: boolean;
   contentAlignment?: 'center' | 'leading' | 'trailing';
   contentInset?: number;
 };
@@ -27,9 +37,15 @@ export function NativePostButton({
   tintColor = '#ffffff',
   foregroundColor,
   size = 44,
+  stackValue = false,
   contentAlignment = 'center',
   contentInset = 0,
 }: NativePostButtonProps) {
+  // Matches the iOS build: an icon with a value beside it becomes a capsule
+  // showing both, rather than the icon alone.
+  const withValue = !!systemImage && !!displayLabel;
+  const stacked = withValue && stackValue;
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -40,8 +56,15 @@ export function NativePostButton({
         appearance === 'glass' ? 'bg-overlay' : appearance === 'filled' ? 'bg-ink' : ''
       } ${disabled ? 'opacity-40' : ''}`}
       style={{
-        width: size,
-        height: size,
+        width: stacked ? size : withValue ? undefined : size,
+        minWidth: withValue && !stacked ? size : undefined,
+        paddingHorizontal: withValue && !stacked ? 14 : 0,
+        paddingVertical: stacked ? 7 : 0,
+        flexDirection: stacked ? 'column' : 'row',
+        gap: stacked ? 1 : withValue ? 6 : 0,
+        // Upright, the content decides the height; a fixed one would either
+        // crop the number or leave a gap under the glyph.
+        height: stacked ? undefined : size,
         alignItems:
           contentAlignment === 'leading'
             ? 'flex-start'
@@ -53,11 +76,17 @@ export function NativePostButton({
       }}>
       {systemImage ? (
         <Icon name={systemImage} size={20} tintColor={foregroundColor ?? tintColor} />
-      ) : (
-        <Text style={{ color: foregroundColor ?? tintColor, fontSize: 16, fontWeight: '600' }}>
+      ) : null}
+      {!systemImage || withValue ? (
+        <Text
+          style={{
+            color: foregroundColor ?? tintColor,
+            fontSize: stacked ? 13 : 16,
+            fontWeight: '600',
+          }}>
           {displayLabel ?? label}
         </Text>
-      )}
+      ) : null}
     </Pressable>
   );
 }

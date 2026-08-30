@@ -115,27 +115,57 @@ function RootNavigator() {
             headerShadowVisible: false,
           }}
         />
+        {/*
+          A sheet, like the post editor it sits beside.
+
+          Both are edits made to something you are looking at, and both are
+          reached from the same actions menu — presented differently they read as
+          two unrelated parts of the app. Full detent so it goes edge to edge
+          rather than floating: iOS 26 insets a sheet resting at anything less.
+        */}
         <Stack.Screen
           name="rediger-album/[id]"
           options={{
-            animation: 'slide_from_right',
-            headerShown: true,
-            title: 'Rediger album',
-            headerBackButtonDisplayMode: 'minimal',
-            headerStyle: { backgroundColor: '#000000' },
-            headerTintColor: '#ffffff',
-            headerShadowVisible: false,
+            presentation: 'formSheet',
+            sheetGrabberVisible: true,
+            sheetAllowedDetents: [1],
+            sheetCornerRadius: 24,
+            // The sheet draws its own bar, with the close button beside the
+            // grabber and saving opposite it.
+            headerShown: false,
           }}
         />
+        {/*
+          A sheet, not a pushed screen.
+
+          Editing a post is a detour from looking at it, and a push replaces the
+          photo with a form as though it were somewhere else in the app. As a
+          sheet the photo stays visible behind it, and the way out is the one
+          every other panel here uses: drag the grabber down, or press the
+          close button.
+
+          formSheet rather than modal because the grabber is only drawn for a
+          form sheet — this is UIKit's own lip and its own dismiss gesture,
+          rather than a bar we draw and wire up ourselves.
+        */}
         <Stack.Screen
           name="rediger-innlegg/[id]"
           options={{
-            headerShown: true,
-            title: 'Rediger innlegg',
-            headerBackButtonDisplayMode: 'minimal',
-            headerStyle: { backgroundColor: '#000000' },
-            headerTintColor: '#ffffff',
-            headerShadowVisible: false,
+            presentation: 'formSheet',
+            sheetGrabberVisible: true,
+            /*
+             * Full height, which is also what stops it floating.
+             *
+             * iOS 26 insets a sheet resting at a partial detent, so 0.92 drew
+             * gaps down both sides and read as a card rather than as the panel
+             * the album and settings editors are. At 1 it goes edge to edge like
+             * them, and still keeps the grabber and the drag to dismiss.
+             */
+            sheetAllowedDetents: [1],
+            sheetCornerRadius: 24,
+            // The sheet carries its own close button beside the grabber, so a
+            // navigation bar on top of that would be a second way to say it.
+            headerShown: false,
           }}
         />
         <Stack.Screen

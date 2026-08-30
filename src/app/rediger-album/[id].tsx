@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
 import ReorderableList, {
   reorderItems,
@@ -13,7 +13,8 @@ import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { ErrorNotice } from '@/components/error-notice';
 import { NativePostButton } from '@/components/native-post-button';
-import { AlbumGridSkeleton } from '@/components/skeleton';
+import { ShareCard, type ShareTarget } from '@/components/share-card';
+import { AlbumEditSkeleton } from '@/components/skeleton';
 import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import {
@@ -61,6 +62,14 @@ export default function EditAlbumScreen() {
   const [downloadingPostId, setDownloadingPostId] = useState<string | null>(null);
   const [downloadedPostId, setDownloadedPostId] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  /**
+   * The post being turned into a shareable picture.
+   *
+   * The card has to be mounted to be captured, so it exists only while this is
+   * set — leaving it mounted afterwards would hold a second copy of the photo
+   * for every post ever shared.
+   */
+  const [sharing, setSharing] = useState<ShareTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -187,20 +196,56 @@ export default function EditAlbumScreen() {
     ]);
   }
 
+  /**
+   * The sheet's own bar: out, the title, and whatever belongs on the right.
+   *
+   * The same arrangement as the post editor — close left, confirm right, which
+   * is how UIKit lays out an edit sheet — and the same glass controls the album
+   * chrome uses. The grabber above it is UIKit's own, drawn because the route
+   * asks for a form sheet, so dragging down is a third way out alongside the
+   * button and the backdrop.
+   *
+   * A function rather than an element because saving depends on a loaded album,
+   * and the loading and not-found states need the same bar without it. They pass
+   * nothing and get a spacer, which keeps the title on the centre line instead
+   * of letting it drift right when the third control is missing.
+   */
+  const bar = (right?: ReactNode) => (
+    <View className="flex-row items-center justify-between px-4 pb-2 pt-6">
+      <NativePostButton
+        label="Lukk"
+        systemImage="xmark"
+        appearance="glass"
+        size={38}
+        onPress={() => router.back()}
+      />
+
+      <Text className="text-base text-ink">Rediger album</Text>
+
+      {right ?? <View className="h-[38px] w-[38px]" />}
+    </View>
+  );
+
   if (loading) {
     return (
-      <View className="flex-1 bg-canvas px-5 pt-5">
-        <AlbumGridSkeleton />
+      <View className="flex-1 bg-canvas">
+        {bar()}
+        <View className="px-5">
+          <AlbumEditSkeleton />
+        </View>
       </View>
     );
   }
 
   if (!album || !selfId || !id) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-canvas px-8">
-        <Text className="text-center text-base text-muted">
-          {error ?? 'Fant ikke albumet.'}
-        </Text>
+      <View className="flex-1 bg-canvas">
+        {bar()}
+        <View className="flex-1 items-center justify-center gap-3 px-8">
+          <Text className="text-center text-base text-muted">
+            {error ?? 'Fant ikke albumet.'}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -256,26 +301,30 @@ export default function EditAlbumScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Lagre endringer"
-              disabled={!dirty || busy}
-              onPress={save}
-              hitSlop={8}>
-              {busy ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <Text className={dirty ? 'text-base text-ink' : 'text-base text-muted'}>
-                  {justSaved && !dirty ? 'Lagret' : 'Lagre'}
-                </Text>
-              )}
-            </Pressable>
-          ),
-        }}
-      />
+      {/*
+        Saving is a tick rather than the word "Lagre": iOS 26 gives every header
+        button a glass background, and the word arrived as a wide capsule that
+        read as the loudest thing on a screen made of the album's own
+        photographs. The saved state is carried by colour, since swapping one
+        tick for another tick would say nothing.
+      */}
+      {bar(
+        busy ? (
+          <View className="h-[38px] w-[38px] items-center justify-center">
+            <ActivityIndicator color="#ffffff" size="small" />
+          </View>
+        ) : (
+          <NativePostButton
+            label={justSaved && !dirty ? 'Lagret' : 'Lagre endringer'}
+            systemImage="checkmark"
+            appearance="glass"
+            size={38}
+            disabled={!dirty}
+            tintColor={justSaved && !dirty ? '#34c759' : '#ffffff'}
+            onPress={save}
+          />
+        )
+      )}
       <Screen className="flex-1" edges={['bottom']}>
         <ReorderableList
           data={posts}
@@ -517,6 +566,20 @@ export default function EditAlbumScreen() {
                     : 'idle'
               }
               onDownload={() => void downloadPost(item)}
+              onShare={() => {
+                if (sharing) return;
+                void Haptics.selectionAsync();
+                setSharing({
+                  albumTitle: album.title,
+                  imageUrl: item.imageUrl,
+                  selfieUrl: item.selfieUrl,
+                  title: item.title,
+                  takenAt: item.takenAt,
+                  location: item.location,
+                  rating: item.rating,
+                  author: item.author?.display_name ?? item.author?.username ?? null,
+                });
+              }}
               canCustomize={canCustomize}
               isCover={coverPostId === item.id}
               onSelectCover={() => {
@@ -539,6 +602,24 @@ export default function EditAlbumScreen() {
           }
         />
       </Screen>
+
+      {/*
+        Mounted only while a share is in flight: it draws itself off screen,
+        captures, opens the share sheet and then asks to be taken away.
+
+        Failures go to an Alert rather than the screen's error banner, which is
+        about the album failing to load or save — a share that did not happen has
+        changed nothing here.
+      */}
+      {sharing ? (
+        <ShareCard
+          target={sharing}
+          onDone={(message) => {
+            setSharing(null);
+            if (message) Alert.alert('Deling', message);
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -557,6 +638,7 @@ function PostRow({
   canDownload,
   downloadState,
   onDownload,
+  onShare,
   canCustomize,
   isCover,
   onSelectCover,
@@ -568,6 +650,7 @@ function PostRow({
   canDownload: boolean;
   downloadState: 'idle' | 'saving' | 'saved';
   onDownload: () => void;
+  onShare: () => void;
   canCustomize: boolean;
   isCover: boolean;
   onSelectCover: () => void;
@@ -622,9 +705,18 @@ function PostRow({
         ) : null}
       </View>
 
+      {/*
+        Built like the two buttons after it rather than as a NativePostButton.
+
+        As a native button it drew its glyph at 18pt semibold with a large image
+        scale, against 15pt here — and `square.and.arrow.down` is a tall symbol
+        on top of that, so it towered over the bin and the grip beside it. Three
+        controls in one row have to be one control repeated.
+      */}
       {canDownload ? (
-        <NativePostButton
-          label={
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
             downloadState === 'saving'
               ? 'Lagrer filen'
               : downloadState === 'saved'
@@ -633,19 +725,44 @@ function PostRow({
                   ? 'Lagre videoen i Bilder'
                   : 'Lagre bildet i Bilder'
           }
-          systemImage={
-            downloadState === 'saving'
-              ? 'hourglass'
-              : downloadState === 'saved'
-                ? 'checkmark'
-                : 'square.and.arrow.down'
-          }
           disabled={busy || downloadState === 'saving'}
-          tintColor={downloadState === 'saved' ? '#34c759' : '#b0b4ba'}
-          size={36}
           onPress={onDownload}
-        />
+          hitSlop={6}
+          className="h-9 w-9 items-center justify-center rounded-full active:bg-glass-strong">
+          <Icon
+            name={
+              downloadState === 'saving'
+                ? 'hourglass'
+                : downloadState === 'saved'
+                  ? 'checkmark'
+                  : 'square.and.arrow.down'
+            }
+            size={15}
+            tintColor={downloadState === 'saved' ? '#34c759' : '#b0b4ba'}
+            fallback={<Text className="text-muted">↓</Text>}
+          />
+        </Pressable>
       ) : null}
+
+      {/*
+        Sharing lives here rather than over the photograph itself. It is a thing
+        done to one picture on purpose, which is what this list is for — and the
+        album view had four permanent controls before it was added.
+      */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Del bildet"
+        disabled={busy}
+        onPress={onShare}
+        hitSlop={6}
+        className="h-9 w-9 items-center justify-center rounded-full active:bg-glass-strong">
+        <Icon
+          name="square.and.arrow.up"
+          size={15}
+          tintColor="#b0b4ba"
+          fallback={<Text className="text-muted">↗</Text>}
+        />
+      </Pressable>
 
       <Pressable
         accessibilityRole="button"

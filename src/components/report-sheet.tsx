@@ -1,9 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
 import { BottomSheet } from '@/components/bottom-sheet';
+import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import { ErrorNotice } from '@/components/error-notice';
 import type { ReportReason } from '@/lib/database.types';
@@ -24,6 +26,7 @@ type Props = {
  * upsetting should not have to go looking.
  */
 export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
+  const insets = useSafeAreaInsets();
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState('');
   const [alsoBlock, setAlsoBlock] = useState(true);
@@ -49,22 +52,21 @@ export function ReportSheet({ selfId, target, onClose, onDone }: Props) {
   }
 
   return (
-    <BottomSheet visible={!!target} onClose={onClose} backdrop="bg-black/60" avoidKeyboard>
-      <Screen className="px-5" edges={['bottom']}>
+    <BottomSheet
+      visible={!!target}
+      onClose={onClose}
+      className="h-[58vh]"
+      avoidKeyboard
+      keyboardVerticalOffset={process.env.EXPO_OS === 'ios' ? -insets.bottom : 0}>
+      <Screen className="flex-1 px-5" edges={['bottom']}>
         <View className="flex-row items-center justify-between py-4">
           <Text className="text-xl text-ink">Rapporter innhold</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Lukk"
+          <NativePostButton
+            label="Lukk"
+            systemImage="xmark"
+            appearance="glass"
             onPress={onClose}
-            className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-            <Icon
-              name="xmark"
-              size={15}
-              tintColor="#ffffff"
-              fallback={<Text className="text-base text-ink">✕</Text>}
-            />
-          </Pressable>
+          />
         </View>
 
         <Text className="mb-3 text-sm text-muted">Hva er galt?</Text>

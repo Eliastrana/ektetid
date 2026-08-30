@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Dimensions, FlatList, Modal, Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
+import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import type { AlbumPost } from '@/lib/album';
 
@@ -47,18 +48,12 @@ export function PostGridSheet({
             <Text className="text-base text-ink">
               {posts.length} {posts.length === 1 ? 'bilde' : 'bilder'}
             </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Lukk oversikten"
+            <NativePostButton
+              label="Lukk oversikten"
+              systemImage="xmark"
+              appearance="glass"
               onPress={onClose}
-              className="h-9 w-9 items-center justify-center rounded-full bg-glass">
-              <Icon
-                name="xmark"
-                size={15}
-                tintColor="#ffffff"
-                fallback={<Text className="text-base text-ink">✕</Text>}
-              />
-            </Pressable>
+            />
           </View>
 
           <FlatList
@@ -76,6 +71,20 @@ export function PostGridSheet({
             })}
             contentContainerStyle={{ padding: GAP, gap: GAP }}
             columnWrapperStyle={{ gap: GAP }}
+            /*
+             * Kept deliberately small, because every mounted tile starts a
+             * download. The defaults render ten items and keep twenty-one
+             * screens of them alive, which on a long album means the whole
+             * thing decoding at once and the rows the reader is actually
+             * looking at queued behind the rest.
+             *
+             * Three rows ahead is enough that scrolling at a normal speed never
+             * reaches an empty one, and the blurhash covers it if it does.
+             */
+            initialNumToRender={COLUMNS * 4}
+            maxToRenderPerBatch={COLUMNS * 3}
+            windowSize={3}
+            removeClippedSubviews
             renderItem={({ item, index: position }) => {
               const active = position === index;
               return (
@@ -89,13 +98,28 @@ export function PostGridSheet({
                   }}
                   style={{ width: tile, height: tile }}
                   className="overflow-hidden rounded-md bg-surface-raised active:opacity-70">
-                  {item.imageUrl ? (
+                  {item.thumbnailUrl ? (
                     <Image
-                      source={{ uri: item.imageUrl }}
+                      // The small copy, not the full image. A tile is a quarter
+                      // of the screen's width; the full one is up to 2048px, so
+                      // this asks for about a hundredth of the bytes.
+                      source={{ uri: item.thumbnailUrl }}
                       placeholder={item.blurhash ? { blurhash: item.blurhash } : undefined}
+                      // The blurhash is there to be shown while the tile
+                      // loads, so let it: without this expo-image holds the
+                      // placeholder back until it has the real bytes, and the
+                      // grid opens as a field of empty squares.
+                      placeholderContentFit="cover"
                       style={{ width: '100%', height: '100%' }}
                       contentFit="cover"
                       transition={120}
+                      // Thumbnails are small and reopened constantly, so they
+                      // are worth keeping on disk between sessions.
+                      cachePolicy="memory-disk"
+                      // The photo the reader is about to look at matters more
+                      // than the grid they are leaving.
+                      priority="low"
+                      recyclingKey={item.id}
                     />
                   ) : null}
 

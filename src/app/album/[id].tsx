@@ -19,19 +19,34 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { ActionCluster, CLUSTER_GAP } from '@/components/action-cluster';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
 import { NativePostButton } from '@/components/native-post-button';
 import { PeopleSheet } from '@/components/people-sheet';
 import { ReportSheet } from '@/components/report-sheet';
+import { GlassPill } from '@/components/glass-pill';
+import { LikeButton } from '@/components/like-button';
 import { imageSpecs, PostTile } from '@/components/post-tile';
 import { PostVideo } from '@/components/post-video';
 import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
 import { PostGridSheet } from '@/components/post-grid-sheet';
 import { StoryProgress } from '@/components/story-progress';
-import { fetchAlbum, markAlbumRead, type AlbumDetail } from '@/lib/album';
+import {
+  fetchAlbum,
+  markAlbumRead,
+  openingIndex,
+  prefetchAlbum,
+  prefetchedAlbum,
+  type AlbumDetail,
+} from '@/lib/album';
+import {
+  chromeHidingNow,
+  loadChromeHiding,
+  type ChromeHiding,
+} from '@/lib/chrome-hiding';
 import { fetchNextAlbum, type NextAlbum } from '@/lib/feed';
 import { decodeOrigin } from '@/lib/origin';
 import type { ReportTarget } from '@/lib/moderation';
@@ -57,6 +72,16 @@ const DISMISS_DISTANCE = 82;
 
 /** How long the album takes to grow out of, or shrink back into, its card. */
 const GENIE_MS = 300;
+
+/**
+ * One half of the hand-over to the next album.
+ *
+ * Both halves get the same duration and easing, because they are meant to read
+ * as one movement interrupted by a route change rather than as two animations
+ * that happen to be adjacent.
+ */
+const HANDOVER_MS = 260;
+const HANDOVER_EASING = Easing.out(Easing.cubic);
 
 /**
  * Drag distance that closes the album completely, in points.
@@ -98,6 +123,8 @@ export default function AlbumScreen() {
     cb?: string;
     /** Open a particular post when coming from the vertical stream. */
     post?: string;
+    /** Set to 'next' when arriving from the album before this one. */
+    from?: string;
   }>();
   const { id } = params;
   const router = useRouter();
@@ -139,6 +166,25 @@ export default function AlbumScreen() {
   const zoomStartX = useSharedValue(0);
   const zoomStartY = useSharedValue(0);
   const chrome = useSharedValue(1);
+
+  /**
+   * The album's own position during a hand-over, in points.
+   *
+   * Separate from `translateX` because that one is the drag, and the drag is
+   * deliberately damped — the photo follows a finger at 0.4 of its distance, so
+   * animating it to a full screen width moved the album only 40% of the way and
+   * then cut. The album never actually left. This translates the full distance,
+   * and it moves the whole shell's contents rather than the photo alone, so the
+   * chrome and the title go with it instead of hanging behind.
+   *
+   * Starts off-screen right when arriving from the previous album, which is the
+   * side the outgoing one left towards.
+   */
+  const handover = useSharedValue(params.from === 'next' ? width : 0);
+
+  const handoverStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: handover.value }],
+  }));
 
 
   /*
@@ -223,11 +269,33 @@ export default function AlbumScreen() {
   const [nextAlbum, setNextAlbum] = useState<NextAlbum | null>(null);
   const [showGrid, setShowGrid] = useState(false);
 
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const chromeHeld = useRef(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hiding, setHiding] = useState<ChromeHiding>(chromeHidingNow);
+  /**
+   * Whether the controls are up, as far as JavaScript is concerned.
+   *
+   * `chrome` is a shared value and so invisible to the render, but a control at
+   * opacity zero is still a control: without this the hidden chrome kept taking
+   * the taps meant for the photo behind it. That was already true of the
+   * timer, and matters more now that hidden is a state someone chooses and can
+   * stay in.
+   */
+  const [chromeVisible, setChromeVisible] = useState(true);
 
   const posts = useMemo(() => album?.posts ?? [], [album]);
   const current = posts[index];
   const currentSpecs = imageSpecs(current?.exif);
+
+  /**
+   * Whether this viewer may see who has looked at this photo.
+   *
+   * Your own post, and Pro. Hoisted because it decides two things that have to
+   * agree: whether the sheet offers the "Har sett" tab at all, and whether
+   * there is any way into the sheet on a photo nobody has hearted.
+   */
+  const canSeeViews = !!session && !!current && current.author_id === session.user.id && isPro;
 
   useEffect(() => {
     if (!session) return;
@@ -265,6 +333,28 @@ export default function AlbumScreen() {
     // animation. Applying it mid-flight mounts the full-screen image, the
     // progress bar and the tile all at once, and that render is long enough to
     // drop frames in the middle of the transition.
+    const apply = (detail: AlbumDetail) => {
+      setAlbum(detail);
+      // Resume where the user left off, as the original did via localStorage.
+      setIndex(openingIndex(detail, params.post));
+    };
+
+    /*
+     * A hand-over arrives with the album already fetched.
+     *
+     * Straight to the content, with no timer: the wait existed to keep a heavy
+     * first render out of the opening animation, and there is no opening
+     * animation to protect here — the slide is driven by `handover`, which does
+     * not care what is inside it.
+     */
+    const ready = prefetchedAlbum(id);
+    if (ready) {
+      apply(ready);
+      return () => {
+        active = false;
+      };
+    }
+
     void fetchAlbum(id)
       .then((detail) => {
         if (!active) return;
@@ -273,19 +363,7 @@ export default function AlbumScreen() {
           : 0;
         mountTimer = setTimeout(() => {
           if (!active) return;
-          setAlbum(detail);
-          // Resume where the user left off, as the original did via localStorage.
-          const requested = params.post
-            ? detail.posts.findIndex((post) => post.id === params.post)
-            : -1;
-          setIndex(
-            requested >= 0
-              ? requested
-              : Math.min(
-                  Math.max(detail.lastSeenPosition, 0),
-                  Math.max(detail.posts.length - 1, 0)
-                )
-          );
+          apply(detail);
         }, openingTimeLeft);
       })
       .catch(() => {
@@ -301,6 +379,32 @@ export default function AlbumScreen() {
     if (!origin) return;
     genie.value = withTiming(1, { duration: GENIE_MS, easing: Easing.out(Easing.cubic) });
   }, [genie, origin]);
+
+  /*
+   * The second half of the hand-over: slide in from the side the outgoing album
+   * left towards. Without this the next album simply appeared, which is what
+   * made a deliberate movement end in a jump.
+   *
+   * Keyed on the album rather than left to the shared value's initial value,
+   * because whether `replace` remounts this screen or reuses it with new params
+   * is react-navigation's business, not ours. Reused, a mount-time initial
+   * value would never run again and the album would stay parked off-screen
+   * where the outgoing animation left it. Assigning the start here and then
+   * animating from it is correct either way.
+   */
+  useEffect(() => {
+    if (params.from === 'next') {
+      handover.value = width;
+      handover.value = withTiming(0, {
+        duration: HANDOVER_MS,
+        easing: HANDOVER_EASING,
+      });
+    } else {
+      handover.value = 0;
+    }
+    // A new album should not inherit the drag that ended the last one.
+    translateX.value = 0;
+  }, [handover, id, params.from, translateX, width]);
 
   // Preload the neighbours so advancing feels instant.
   useEffect(() => {
@@ -362,13 +466,53 @@ export default function AlbumScreen() {
 
   // ----------------------------------------------------------------- chrome
 
-  const revealChrome = useCallback(() => {
-    chrome.value = withTiming(1, { duration: 150 });
+  /**
+   * (Re)start the countdown, or cancel it. Never touches what is on screen.
+   *
+   * Split from revealing because closing the actions menu needs to resume the
+   * countdown without also forcing the controls back into view — and the menu
+   * now contains a button whose whole job is to put them away. Closing the menu
+   * and hiding the chrome happen in the same press, so a reveal here would have
+   * undone the hide a frame after it started.
+   */
+  const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
+    // Nothing to schedule when the controls only leave on request; and open
+    // actions hold them up regardless, since controls must not fade out from
+    // under a finger still choosing between them.
+    if (hiding !== 'auto' || chromeHeld.current) return;
     hideTimer.current = setTimeout(() => {
       chrome.value = withTiming(0, { duration: 400 });
+      setChromeVisible(false);
     }, CHROME_TIMEOUT_MS);
-  }, [chrome]);
+  }, [chrome, hiding]);
+
+  const revealChrome = useCallback(() => {
+    chrome.value = withTiming(1, { duration: 150 });
+    setChromeVisible(true);
+    scheduleHide();
+  }, [chrome, scheduleHide]);
+
+  const onActionsOpenChange = useCallback(
+    (open: boolean) => {
+      chromeHeld.current = open;
+      setActionsOpen(open);
+      scheduleHide();
+    },
+    [scheduleHide]
+  );
+
+  // Read once per album. The cached value is already right on the second and
+  // later openings, so this only actually changes anything the first time.
+  useEffect(() => {
+    let active = true;
+    void loadChromeHiding().then((value) => {
+      if (active) setHiding(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     revealChrome();
@@ -388,12 +532,34 @@ export default function AlbumScreen() {
    * otherwise stack every one visited, and the close button would walk back
    * through them one at a time instead of returning to the feed.
    */
+  /*
+   * Fetch the next album while the reader is still in this one.
+   *
+   * Both the rows and the photo it will open on, because arriving to a loaded
+   * album that then spends a second downloading its first image is the same
+   * wait moved one step later. Which photo is not always the first: an album
+   * part-read resumes where it was left.
+   */
+  useEffect(() => {
+    if (!nextAlbum) return;
+    let active = true;
+    void prefetchAlbum(nextAlbum.id).then((detail) => {
+      if (!active || !detail || detail.posts.length === 0) return;
+      const url = detail.posts[openingIndex(detail)]?.imageUrl;
+      if (url) void Image.prefetch(url);
+    });
+    return () => {
+      active = false;
+    };
+  }, [nextAlbum]);
+
   const openNextAlbum = useCallback(
     (target: NextAlbum) => {
       router.replace({
         pathname: '/album/[id]',
         params: {
           id: target.id,
+          from: 'next',
           ...(target.coverUrl ? { cover: target.coverUrl } : {}),
           ...(target.coverBlurhash ? { cb: target.coverBlurhash } : {}),
         },
@@ -419,9 +585,9 @@ export default function AlbumScreen() {
         if (nextAlbum) {
           const target = nextAlbum;
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          translateX.value = withTiming(
+          handover.value = withTiming(
             -width,
-            { duration: 260, easing: Easing.out(Easing.cubic) },
+            { duration: HANDOVER_MS, easing: HANDOVER_EASING },
             (finished) => {
               if (finished) runOnJS(openNextAlbum)(target);
             }
@@ -443,7 +609,18 @@ export default function AlbumScreen() {
       setIndex(next);
       revealChrome();
     },
-    [index, nextAlbum, openNextAlbum, posts.length, revealChrome, translateX, width, zoomScale, zoomX, zoomY]
+    [
+      handover,
+      index,
+      nextAlbum,
+      openNextAlbum,
+      posts.length,
+      revealChrome,
+      width,
+      zoomScale,
+      zoomX,
+      zoomY,
+    ]
   );
 
   const settle = useCallback(
@@ -690,7 +867,11 @@ export default function AlbumScreen() {
       // card itself, so scaling about the default centre is already scaling
       // about the card's centre.
       style={genieStyle}>
-      {children}
+      {/* The hand-over layer, inside the shell so the shell's own black stays
+          put and the album slides across it. Without this the vacated side
+          would show the feed through the transparent modal, and a page turn
+          would happen over a grid of other albums. */}
+      <Animated.View style={[handoverStyle, { flex: 1 }]}>{children}</Animated.View>
     </Animated.View>
   );
 
@@ -808,7 +989,10 @@ export default function AlbumScreen() {
       <Scrim height={0.45} />
 
       <Screen className="absolute inset-0" pointerEvents="box-none">
-        <Animated.View style={chromeStyle} pointerEvents="box-none" className="px-4 pt-2">
+        <Animated.View
+          style={chromeStyle}
+          pointerEvents={chromeVisible ? 'box-none' : 'none'}
+          className="px-4 pt-2">
           <StoryProgress
             count={posts.length}
             index={index}
@@ -846,14 +1030,6 @@ export default function AlbumScreen() {
               onPress={() => setUncroppedWithFeedback(!uncropped)}
             />
 
-            {album.canEdit ? (
-              <NativePostButton
-                label="Rediger album"
-                systemImage="slider.horizontal.3"
-                appearance="glass"
-                onPress={() => router.push(`/rediger-album/${album.id}`)}
-              />
-            ) : null}
           </View>
 
           {/* Matches the gap above it: the sound button is the same glass circle
@@ -867,9 +1043,7 @@ export default function AlbumScreen() {
                   className="flex-1"
                   contentContainerStyle={{ gap: 7 }}>
                   {currentSpecs.map((spec) => (
-                    <View key={spec} className="justify-center rounded-full bg-overlay px-3 py-2">
-                      <Text className="text-xs text-ink opacity-85">{spec}</Text>
-                    </View>
+                    <GlassPill key={spec}>{spec}</GlassPill>
                   ))}
                 </ScrollView>
               ) : null}
@@ -918,75 +1092,108 @@ export default function AlbumScreen() {
         ) : null}
 
         <View className="gap-3 px-4 pb-4" pointerEvents="box-none">
+          {/*
+            The two that get used, and one button holding the rest.
+
+            The heart and the comments are why anyone reaches down here, so they
+            stay out where a thumb already is — stacked above the trigger rather
+            than beside it, because a row of three would push the album's title
+            off its own line. Everything else is one press away: circles parked
+            over someone's photograph are circles of the photograph they cannot
+            see.
+          */}
           <Animated.View
-            style={chromeStyle}
-            pointerEvents="box-none"
-            className="flex-row justify-end gap-3">
-            <View className="flex-row items-center">
-              {likes.count > 0 ? (
-                <NativePostButton
-                  label={`Se hvem som ga ${likes.count} hjerter`}
-                  displayLabel={String(likes.count)}
-                  size={48}
-                  contentAlignment="trailing"
-                  onPress={() => setPeopleMode('likes')}
-                />
-              ) : null}
-
-              {/* The heart is always the group's rightmost 48pt control. The
-                  optional count therefore grows leftward without moving it. */}
-              <NativePostButton
-                label={likes.likedByMe ? 'Fjern hjerte' : 'Gi hjerte'}
-                systemImage={likes.likedByMe ? 'heart.fill' : 'heart'}
-                tintColor={likes.likedByMe ? '#ff3b30' : '#ffffff'}
-                size={48}
-                onPress={onToggleLike}
-              />
-            </View>
-
-            {current && session && current.author_id === session.user.id && isPro ? (
-              <NativePostButton
-                label="Se hvem som har sett innlegget"
-                systemImage="eye.fill"
-                size={48}
-                onPress={() => setPeopleMode('views')}
-              />
-            ) : null}
+            pointerEvents={chromeVisible ? 'box-none' : 'none'}
+            className="items-end"
+            // The cluster's own spacing, so the column and the row it opens
+            // into are set to one measure rather than two that happen to look
+            // close.
+            style={[chromeStyle, { zIndex: 2, gap: CLUSTER_GAP }]}>
+            <LikeButton
+              liked={likes.likedByMe}
+              count={likes.count}
+              onPress={onToggleLike}
+            />
 
             <NativePostButton
               label="Kommentarer"
               systemImage="bubble.left.fill"
-              size={48}
+              appearance="glass"
               onPress={() => {
                 void Haptics.selectionAsync();
                 setShowComments(true);
               }}
             />
 
-            {current && session && current.author_id === session.user.id ? (
-              <NativePostButton
-                label="Rediger innlegg"
-                systemImage="pencil"
-                size={48}
-                onPress={() => router.push(`/rediger-innlegg/${current.id}` as never)}
-              />
-            ) : null}
-
-            {/* Reporting your own post is meaningless, so it is hidden there. */}
-            {current && session && current.author_id !== session.user.id ? (
-              <NativePostButton
-                label="Rapporter innlegg"
-                systemImage="ellipsis"
-                size={48}
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  setReportTarget({
-                    reportedUserId: current.author_id,
-                    postId: current.id,
-                  });
-                }}
-              />
-            ) : null}
+            <ActionCluster
+              onOpenChange={onActionsOpenChange}
+              resetKey={current?.id}
+              actions={[
+                /*
+                 * The way into the hearts-and-views sheet.
+                 *
+                 * Shown for either reason, not just the first. Gated on the like
+                 * count alone, an unhearted photo offered no way in at all — and
+                 * since the eye was folded into this button, that took the list
+                 * of who has seen it with it. Opens on whichever tab has
+                 * something to show.
+                 */
+                ...(likes.count > 0 || canSeeViews
+                  ? [
+                      {
+                        key: 'likers',
+                        label:
+                          likes.count > 0
+                            ? `Se hvem som ga ${likes.count} hjerter`
+                            : 'Se hvem som har sett bildet',
+                        systemImage: 'person.2.fill' as const,
+                        onPress: () => setPeopleMode(likes.count > 0 ? 'likes' : 'views'),
+                      },
+                    ]
+                  : []),
+                // The album's own settings, moved in from the top row: they are
+                // reached once per album at most, and were taking a permanent
+                // circle out of the photograph to do it.
+                ...(album.canEdit
+                  ? [
+                      {
+                        key: 'album',
+                        label: 'Rediger album',
+                        systemImage: 'slider.horizontal.3' as const,
+                        onPress: () => router.push(`/rediger-album/${album.id}`),
+                      },
+                    ]
+                  : []),
+                ...(current && session && current.author_id === session.user.id
+                  ? [
+                      {
+                        key: 'edit',
+                        label: 'Rediger innlegg',
+                        systemImage: 'pencil' as const,
+                        onPress: () =>
+                          router.push(`/rediger-innlegg/${current.id}` as never),
+                      },
+                    ]
+                  : []),
+                // Reporting your own post is meaningless, so it is hidden there.
+                ...(current && session && current.author_id !== session.user.id
+                  ? [
+                      {
+                        key: 'report',
+                        label: 'Rapporter innlegg',
+                        systemImage: 'exclamationmark.triangle.fill' as const,
+                        onPress: () => {
+                          void Haptics.selectionAsync();
+                          setReportTarget({
+                            reportedUserId: current.author_id,
+                            postId: current.id,
+                          });
+                        },
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </Animated.View>
 
           {current ? (
@@ -994,6 +1201,7 @@ export default function AlbumScreen() {
               key={current.id}
               post={current}
               showAuthor={album.isShared}
+              hideRating={actionsOpen}
               expanded={expanded}
               onToggle={() => {
                 void Haptics.selectionAsync();
@@ -1052,7 +1260,7 @@ export default function AlbumScreen() {
         <PeopleSheet
           postId={current.id}
           initialMode={peopleMode}
-          canSeeViews={!!session && current.author_id === session.user.id && isPro}
+          canSeeViews={canSeeViews}
           visible
           onClose={() => setPeopleMode(null)}
         />

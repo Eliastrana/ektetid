@@ -46,6 +46,55 @@ export function AlbumGridSkeleton() {
   );
 }
 
+/**
+ * The album editor: two fields, then a row per photo.
+ *
+ * Its own shape rather than the feed's. The editor was showing
+ * AlbumGridSkeleton — two columns of 3:4 cards — and then resolving into a
+ * single column of short rows with a thumbnail on the left, so the placeholder
+ * described a different screen from the one arriving. A skeleton that guesses
+ * wrong is worse than none: it moves everything once the real layout lands.
+ */
+export function AlbumEditSkeleton() {
+  return (
+    <View>
+      {/* "Tittel", and the field under it. */}
+      <SkeletonBox
+        style={{ width: 46, height: 12, borderRadius: 6, marginTop: 16, marginBottom: 8 }}
+      />
+      <SkeletonBox style={{ width: '100%', height: 56, borderRadius: 14 }} />
+
+      {/* "Beskrivelse", which is taller because it takes more than one line. */}
+      <SkeletonBox
+        style={{ width: 86, height: 12, borderRadius: 6, marginTop: 16, marginBottom: 8 }}
+      />
+      <SkeletonBox style={{ width: '100%', height: 80, borderRadius: 14 }} />
+
+      <View style={{ marginTop: 28 }}>
+        {[0, 1, 2, 3].map((row) => (
+          <View
+            key={row}
+            className="mb-2 flex-row items-center gap-3 rounded-tile bg-glass p-2">
+            {/* The same 52x68 the real thumbnail uses. */}
+            <SkeletonBox style={{ width: 52, height: 68, borderRadius: 8 }} />
+            <View className="flex-1 gap-2">
+              <SkeletonBox style={{ width: '64%', height: 14, borderRadius: 7 }} />
+              <SkeletonBox style={{ width: '38%', height: 10, borderRadius: 5 }} />
+            </View>
+            {/* Share, delete and the reorder grip: the three every row has. */}
+            {[0, 1, 2].map((button) => (
+              <SkeletonBox
+                key={button}
+                style={{ width: 36, height: 36, borderRadius: 18 }}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 /** First paint while Keychain/Supabase restores the session. */
 export function AppBootSkeleton() {
   return (

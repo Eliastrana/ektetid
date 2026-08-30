@@ -3,11 +3,13 @@ import { KeyboardAvoidingView, Modal, Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+
+const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
 
 /** Past this far down, releasing dismisses rather than settles back. */
 const DISMISS_DISTANCE = 110;
@@ -56,29 +58,29 @@ export function BottomSheet({
   // A sheet dismissed by dragging is still translated when it reopens, which
   // would leave it sitting low on screen.
   useEffect(() => {
-    if (visible) offset.value = 0;
+    if (visible) offset.set(0);
   }, [offset, visible]);
 
   const drag = Gesture.Pan()
     .onUpdate((event) => {
       // Downward only: dragging up would lift the sheet off the bottom edge
       // and expose the backdrop beneath it.
-      offset.value = Math.max(0, event.translationY);
+      offset.set(Math.max(0, event.translationY));
     })
     .onEnd((event) => {
       if (event.translationY > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY) {
-        runOnJS(onClose)();
+        scheduleOnRN(onClose);
         return;
       }
-      offset.value = withTiming(0, { duration: DURATION, easing: EASING });
+      offset.set(withTiming(0, { duration: DURATION, easing: EASING }));
     });
 
   const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: offset.value }],
+    transform: [{ translateY: offset.get() }],
   }));
 
-  const surface = (
-    <Animated.View style={sheetStyle} className={`rounded-t-3xl bg-surface ${className}`}>
+  const sheetContents = (
+    <>
       <GestureDetector gesture={drag}>
         {/*
           The bar itself is small, so the touch target is the padded row around
@@ -95,6 +97,30 @@ export function BottomSheet({
       </GestureDetector>
 
       {children}
+    </>
+  );
+
+  const surfaceClassName = `rounded-t-3xl bg-canvas ${className}`;
+
+  const surface = avoidKeyboard ? (
+    // bg-canvas, the same ground as the screens that get presented as panels —
+    // the settings and album editors. `surface` lifted a sheet a shade off black
+    // so its edge showed against dark content, but two panel colours in one app
+    // reads as an inconsistency rather than as a hierarchy, and these rise over
+    // a dimmed photograph, which is the edge.
+    <AnimatedKeyboardAvoidingView
+      // Animate the keyboard padding with the sheet. Keeping this wrapper
+      // stationary left a square black panel behind the rounded surface while
+      // Kommentarer was dragged down.
+      style={sheetStyle}
+      className="rounded-t-3xl bg-canvas"
+      behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={keyboardVerticalOffset}>
+      <View className={surfaceClassName}>{sheetContents}</View>
+    </AnimatedKeyboardAvoidingView>
+  ) : (
+    <Animated.View style={sheetStyle} className={surfaceClassName}>
+      {sheetContents}
     </Animated.View>
   );
 
@@ -108,15 +134,7 @@ export function BottomSheet({
           onPress={onClose}
         />
 
-        {avoidKeyboard ? (
-          <KeyboardAvoidingView
-            behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={keyboardVerticalOffset}>
-            {surface}
-          </KeyboardAvoidingView>
-        ) : (
-          surface
-        )}
+        {surface}
       </View>
     </Modal>
   );

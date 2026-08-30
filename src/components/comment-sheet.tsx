@@ -1,4 +1,16 @@
-import { Host, TextInput as NativeTextInput, useNativeState } from '@expo/ui';
+import {
+  Button as NativeButton,
+  Host,
+  Icon as NativeIcon,
+  Text as NativeText,
+} from '@expo/ui';
+import {
+  accessibilityLabel,
+  buttonBorderShape,
+  buttonStyle,
+  controlSize,
+  frame,
+} from '@expo/ui/swift-ui/modifiers';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
@@ -7,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icon';
 import { Avatar } from '@/components/avatar';
 import { BottomSheet } from '@/components/bottom-sheet';
-import { NativePostButton } from '@/components/native-post-button';
+import { CommentComposer } from '@/components/comment-composer';
 import { Screen } from '@/components/screen';
 import {
   addComment,
@@ -24,52 +36,6 @@ type Props = {
   visible: boolean;
   onClose: () => void;
 };
-
-type NativeCommentInputProps = {
-  value: string;
-  placeholder: string;
-  disabled: boolean;
-  onChangeText: (value: string) => void;
-  onSubmit: () => void;
-};
-
-/** Native SwiftUI/Compose text field, embedded in the React Native sheet. */
-function NativeCommentInput({
-  value,
-  placeholder,
-  disabled,
-  onChangeText,
-  onSubmit,
-}: NativeCommentInputProps) {
-  const nativeValue = useNativeState(value);
-
-  useEffect(() => {
-    nativeValue.value = value;
-  }, [nativeValue, value]);
-
-  return (
-    <Host colorScheme="dark" style={{ flex: 1, height: 48 }}>
-      <NativeTextInput
-        value={nativeValue}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#6b6f76"
-        selectionColor="#ffffff"
-        editable={!disabled}
-        maxLength={2000}
-        onSubmitEditing={onSubmit}
-        returnKeyType="send"
-        style={{
-          height: 48,
-          paddingHorizontal: 16,
-          backgroundColor: '#202124',
-          borderRadius: 24,
-        }}
-        textStyle={{ color: '#ffffff', fontSize: 16 }}
-      />
-    </Host>
-  );
-}
 
 /** "3 minutter siden" — the relative formatting dayjs did on the web. */
 function relativeTime(iso: string): string {
@@ -154,7 +120,7 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      className="max-h-[70vh] min-h-[45vh]"
+      className="h-[58vh]"
       avoidKeyboard
       // Screen already reserves the home-indicator inset inside the sheet.
       // Subtract it from iOS' keyboard displacement so the same inset is not
@@ -163,13 +129,23 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
       <Screen className="flex-1" edges={['bottom']}>
         <View className="flex-row items-center justify-between px-5 py-4">
           <Text className="text-xl text-ink">Kommentarer</Text>
-          <NativePostButton
-            label="Lukk kommentarer"
-            systemImage="xmark"
-            onPress={onClose}
-            appearance="glass"
-            size={36}
-          />
+          <Host colorScheme="dark" matchContents>
+            <NativeButton
+              onPress={onClose}
+              modifiers={[
+                buttonStyle('glass'),
+                controlSize('large'),
+                buttonBorderShape('circle'),
+                frame({ width: 44, height: 44 }),
+                accessibilityLabel('Lukk kommentarer'),
+              ]}>
+              {process.env.EXPO_OS === 'ios' ? (
+                <NativeIcon name="xmark" size={18} />
+              ) : (
+                <NativeText textStyle={{ color: '#ffffff', fontSize: 18 }}>✕</NativeText>
+              )}
+            </NativeButton>
+          </Host>
         </View>
 
         <FlatList
@@ -277,26 +253,14 @@ export function CommentSheet({ postId, selfId, visible, onClose }: Props) {
           </View>
         ) : null}
 
-        <View
-          className={`flex-row items-center gap-2 px-5 py-3 ${
-            replyTo ? '' : 'border-t border-glass-border'
-          }`}>
-          <NativeCommentInput
+        <View className={`px-5 py-3 ${replyTo ? '' : 'border-t border-glass-border'}`}>
+          <CommentComposer
             value={draft}
             onChangeText={setDraft}
             placeholder={replyTo ? 'Skriv et svar…' : 'Skriv en kommentar…'}
             disabled={sending}
+            sending={sending}
             onSubmit={() => void send()}
-          />
-          <NativePostButton
-            label="Send kommentar"
-            systemImage={sending ? 'hourglass' : 'arrow.up'}
-            disabled={!draft.trim() || sending}
-            onPress={() => void send()}
-            appearance="filled"
-            tintColor="#ffffff"
-            foregroundColor="#000000"
-            size={48}
           />
         </View>
       </Screen>

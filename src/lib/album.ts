@@ -6,6 +6,15 @@ export type PostAuthor = { id: string; username: string; display_name: string | 
 
 export type AlbumPost = Post & {
   imageUrl: string | null;
+  /**
+   * The 192px-wide copy written at publish time, for showing this post small.
+   *
+   * Falls back to the full image only for posts published before thumbnails
+   * existed. Anything drawing a grid of these should reach for it: the full
+   * image is up to 2048px, which is roughly a hundred times the pixels a
+   * quarter-width tile can show.
+   */
+  thumbnailUrl: string | null;
   selfieUrl: string | null;
   /** Present only on a video post; imageUrl still holds its first frame. */
   videoUrl: string | null;
@@ -24,6 +33,63 @@ export type AlbumDetail = {
   /** Whether the viewer may add to or edit this album. */
   canEdit: boolean;
 };
+
+/**
+ * Which post an album opens on.
+ *
+ * Shared so that the album fetched ahead of time is warmed at the photo it will
+ * actually show. Prefetching post one and then opening on post nine would be
+ * work done for nothing.
+ */
+export function openingIndex(detail: AlbumDetail, requestedPostId?: string): number {
+  const requested = requestedPostId
+    ? detail.posts.findIndex((post) => post.id === requestedPostId)
+    : -1;
+  if (requested >= 0) return requested;
+  return Math.min(
+    Math.max(detail.lastSeenPosition, 0),
+    Math.max(detail.posts.length - 1, 0)
+  );
+}
+
+/**
+ * Albums fetched before anyone asked for them.
+ *
+ * Reading to the end of an album hands over to the next one, and that used to
+ * begin with a round-trip: the outgoing album slid away and the incoming one
+ * sat on a black screen until its rows arrived. Fetching while the reader is
+ * still on the last few photos means the hand-over lands on something.
+ *
+ * Deliberately not a general cache. `fetchAlbum` stays authoritative for every
+ * ordinary navigation, so opening an album never shows a stale copy of it;
+ * these entries are consumed once and expire quickly.
+ */
+const ahead = new Map<string, { detail: AlbumDetail; at: number }>();
+
+const AHEAD_TTL_MS = 90 * 1000;
+
+/** Fetch an album into the hand-over store. Safe to call repeatedly. */
+export async function prefetchAlbum(albumId: string): Promise<AlbumDetail | null> {
+  const existing = ahead.get(albumId);
+  if (existing && Date.now() - existing.at < AHEAD_TTL_MS) return existing.detail;
+  try {
+    const detail = await fetchAlbum(albumId);
+    ahead.set(albumId, { detail, at: Date.now() });
+    return detail;
+  } catch {
+    // A hand-over that has to fetch on arrival is the old behaviour, not a
+    // failure worth surfacing.
+    return null;
+  }
+}
+
+/** Take an album out of the hand-over store, if a fresh one is waiting. */
+export function prefetchedAlbum(albumId: string): AlbumDetail | null {
+  const hit = ahead.get(albumId);
+  if (!hit) return null;
+  ahead.delete(albumId);
+  return Date.now() - hit.at < AHEAD_TTL_MS ? hit.detail : null;
+}
 
 /**
  * Load a whole album at once.
@@ -51,7 +117,7 @@ export async function fetchAlbum(albumId: string): Promise<AlbumDetail> {
   if (postsResult.error) throw postsResult.error;
 
   const paths = postsResult.data.flatMap((post) =>
-    [post.image_path, post.selfie_path, post.video_path].filter(
+    [post.image_path, post.thumbnail_path, post.selfie_path, post.video_path].filter(
       (path): path is string => !!path
     )
   );
@@ -74,6 +140,9 @@ export async function fetchAlbum(albumId: string): Promise<AlbumDetail> {
     posts: postsResult.data.map((post) => ({
       ...post,
       imageUrl: urls.get(post.image_path) ?? null,
+      thumbnailUrl: post.thumbnail_path
+        ? (urls.get(post.thumbnail_path) ?? null)
+        : (urls.get(post.image_path) ?? null),
       selfieUrl: post.selfie_path ? (urls.get(post.selfie_path) ?? null) : null,
       videoUrl: post.video_path ? (urls.get(post.video_path) ?? null) : null,
       author: (post.author ?? null) as unknown as PostAuthor | null,

@@ -21,6 +21,14 @@ type Props = {
    * every post is the owner's, so the name would be noise on every frame.
    */
   showAuthor?: boolean;
+  /**
+   * Drop the dice while something else needs the band above the tile.
+   *
+   * The rating floats there, which is the same strip the album's controls
+   * occupy — with the actions open the two overlapped, and a translucent glass
+   * button with pips showing through it is worse than no pips at all.
+   */
+  hideRating?: boolean;
 };
 
 const MONTHS = [
@@ -29,6 +37,16 @@ const MONTHS = [
 ];
 
 const SELFIE_COLLAPSED = { width: 60, height: 80 };
+
+/**
+ * The album screen's own `gap-3` between the chrome and this tile, in points.
+ *
+ * The rating floats above the tile on the left while the chrome column floats
+ * above it on the right, so the two are read as one band whether or not they
+ * were built that way. Sitting 8pt above the tile against the chrome's 12 put
+ * their bottom edges 4pt out of line with each other.
+ */
+const CHROME_GAP = 12;
 const SELFIE_EXPANDED = { width: 132, height: 176 };
 const DESCRIPTION_PREVIEW_LINES = 4;
 
@@ -59,7 +77,7 @@ const SELFIE_MIN_SCALE = SELFIE_COLLAPSED.width / SELFIE_EXPANDED.width;
 const DURATION = 260;
 const EASING = Easing.out(Easing.cubic);
 
-function formatNorwegianDate(iso: string): string {
+export function formatNorwegianDate(iso: string): string {
   const date = new Date(iso);
   return `${date.getDate()}. ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
@@ -143,7 +161,13 @@ export function imageSpecs(exif: unknown): string[] {
  * Text is always white here — the scrim guarantees a dark backdrop, so the
  * per-post luminance is not needed to choose a colour.
  */
-export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props) {
+export function PostTile({
+  post,
+  expanded,
+  onToggle,
+  showAuthor = false,
+  hideRating = false,
+}: Props) {
   const specs = imageSpecs(post.exif);
   const hasDetail = !!post.selfieUrl || specs.length > 0;
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -171,12 +195,12 @@ export function PostTile({ post, expanded, onToggle, showAuthor = false }: Props
 
   return (
     <View className="relative">
-      {post.rating ? (
+      {post.rating && !hideRating ? (
         <View
           pointerEvents="none"
           className="absolute left-0 items-start justify-center"
           style={{
-            top: -(SELFIE_COLLAPSED.width + 8),
+            top: -(SELFIE_COLLAPSED.width + CHROME_GAP),
             width: SELFIE_COLLAPSED.width,
             height: SELFIE_COLLAPSED.width,
           }}>

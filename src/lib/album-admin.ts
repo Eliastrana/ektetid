@@ -14,8 +14,12 @@ export type AdminPost = {
   selfiePath: string | null;
   videoPath: string | null;
   imageUrl: string | null;
+  /** Signed like the main image, for the shareable card built from this row. */
+  selfieUrl: string | null;
   videoUrl: string | null;
   blurhash: string | null;
+  location: string | null;
+  rating: number | null;
   author: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
 };
 
@@ -45,7 +49,7 @@ export async function fetchAlbumAdmin(albumId: string, selfId: string): Promise<
       // Written as one literal: PostgREST's types are inferred from the
       // string, and a concatenation is opaque to that inference.
       .select(
-        'id, position, title, taken_at, image_path, selfie_path, video_path, blurhash, author:profiles!posts_author_id_fkey(id, username, display_name, avatar_url)'
+        'id, position, title, taken_at, image_path, selfie_path, video_path, blurhash, location, rating, author:profiles!posts_author_id_fkey(id, username, display_name, avatar_url)'
       )
       .eq('album_id', albumId)
       .order('position'),
@@ -59,7 +63,9 @@ export async function fetchAlbumAdmin(albumId: string, selfId: string): Promise<
   if (posts.error) throw posts.error;
 
   const paths = posts.data.flatMap((post) =>
-    [post.image_path, post.video_path].filter((path): path is string => !!path)
+    [post.image_path, post.selfie_path, post.video_path].filter(
+      (path): path is string => !!path
+    )
   );
   const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
 
@@ -82,8 +88,11 @@ export async function fetchAlbumAdmin(albumId: string, selfId: string): Promise<
       selfiePath: post.selfie_path,
       videoPath: post.video_path,
       imageUrl: urls.get(post.image_path) ?? null,
+      selfieUrl: post.selfie_path ? (urls.get(post.selfie_path) ?? null) : null,
       videoUrl: post.video_path ? (urls.get(post.video_path) ?? null) : null,
       blurhash: post.blurhash,
+      location: post.location,
+      rating: post.rating,
       author: post.author as unknown as AdminPost['author'],
     })),
   };
