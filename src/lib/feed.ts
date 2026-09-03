@@ -5,6 +5,8 @@ import { hasPro } from '@/lib/social';
 
 export type FeedAlbum = AlbumFeedRow & {
   coverUrl: string | null;
+  /** Medium derivative used by feed cards; old rows fall back to the original. */
+  coverPreviewPath: string | null;
   /**
    * Someone else's album that you were added to and can post into — as opposed
    * to a friend's album, which the feed also shows but which you can only read.
@@ -52,7 +54,7 @@ export async function fetchFeed(userId: string): Promise<FeedResult> {
   if (error) throw error;
 
   const coverPaths = data
-    .map((album) => album.cover_image_path)
+    .map((album) => album.cover_preview_path ?? album.cover_image_path)
     .filter((path): path is string => !!path);
 
   // A brand-new account has no albums yet, so skip the signing round-trip.
@@ -73,7 +75,11 @@ export async function fetchFeed(userId: string): Promise<FeedResult> {
     viewerPro: proOwners.get(userId) ?? false,
     albums: data.map((album) => ({
       ...album,
-      coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
+      coverPreviewPath: album.cover_preview_path ?? album.cover_image_path ?? null,
+      coverUrl:
+        album.cover_preview_path || album.cover_image_path
+          ? (urls.get(album.cover_preview_path ?? album.cover_image_path!) ?? null)
+          : null,
       shared: !!album.id && shared.has(album.id),
       ownerPro: album.owner_id ? (proOwners.get(album.owner_id) ?? false) : false,
     })),
@@ -84,6 +90,7 @@ export type NextAlbum = {
   id: string;
   title: string;
   coverUrl: string | null;
+  coverPath: string | null;
   coverBlurhash: string | null;
 };
 
@@ -111,7 +118,7 @@ export async function fetchNextAlbum(albumId: string): Promise<NextAlbum | null>
 
   const { data, error } = await supabase
     .from('album_feed')
-    .select('id, title, cover_image_path, cover_blurhash')
+    .select('id, title, cover_image_path, cover_preview_path, cover_blurhash')
     .lt('last_post_at', current.data.last_post_at)
     .order('last_post_at', { ascending: false, nullsFirst: false })
     .limit(1);
@@ -121,14 +128,16 @@ export async function fetchNextAlbum(albumId: string): Promise<NextAlbum | null>
   const album = data[0];
   if (!album.id) return null;
 
-  const urls = album.cover_image_path
-    ? await signedUrls([album.cover_image_path]).catch(() => new Map<string, string>())
+  const coverPath = album.cover_preview_path ?? album.cover_image_path;
+  const urls = coverPath
+    ? await signedUrls([coverPath]).catch(() => new Map<string, string>())
     : new Map<string, string>();
 
   return {
     id: album.id,
     title: album.title ?? '',
-    coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
+    coverUrl: coverPath ? (urls.get(coverPath) ?? null) : null,
+    coverPath,
     coverBlurhash: album.cover_blurhash ?? null,
   };
 }

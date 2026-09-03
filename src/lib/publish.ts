@@ -11,6 +11,7 @@ import { notify } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 const BUCKET = 'photos';
+const IMMUTABLE_CACHE_SECONDS = '31536000';
 
 export type PublishInput = {
   capture: PendingCapture;
@@ -52,10 +53,27 @@ async function upload(
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, bytes, { contentType, upsert: false });
+    .upload(path, bytes, {
+      contentType,
+      cacheControl: IMMUTABLE_CACHE_SECONDS,
+      upsert: false,
+    });
 
   if (error) throw error;
   return path;
+}
+
+function removeLocalFiles(uris: (string | null | undefined)[]): void {
+  for (const uri of uris) {
+    if (!uri) continue;
+    try {
+      const file = new File(uri);
+      if (file.exists) file.delete();
+    } catch {
+      // These are cache copies. Failure to trim one must not change whether a
+      // post was successfully published.
+    }
+  }
 }
 
 /**
@@ -115,99 +133,124 @@ export async function publishPost(
   const userId = userData.user?.id;
   if (!userId) throw new Error('Du er ikke logget inn.');
 
-  onProgress?.('processing');
-  const image = await processImage(
-    input.capture.imageUri,
-    input.capture.width,
-    input.capture.height
-  );
-  const selfie = input.capture.selfieUri
-    ? await processSelfie(input.capture.selfieUri)
-    : null;
+  const generatedUris: string[] = [];
+  const uploadedPaths: string[] = [];
+  let committed = false;
 
-  onProgress?.('uploading');
-  const [imagePath, thumbnailPath] = await Promise.all([
-    upload(image.uri, userId),
-    upload(image.thumbnailUri, userId),
-  ]);
+  try {
+    onProgress?.('processing');
+    const image = await processImage(
+      input.capture.imageUri,
+      input.capture.width,
+      input.capture.height
+    );
+    generatedUris.push(image.uri, image.thumbnailUri, image.previewUri);
+    const selfie = input.capture.selfieUri
+      ? await processSelfie(input.capture.selfieUri)
+      : null;
+    if (selfie) generatedUris.push(selfie.uri);
 
-  /*
-   * The clip, uploaded as it came off the camera.
-   *
-   * Not re-encoded: the device already wrote H.264 at a sane bitrate, and a
-   * second pass would cost seconds of the user's time to save megabytes that
-   * the ten-second cap has already bounded. iOS writes QuickTime, hence the
-   * mime type — the bucket accepts both that and mp4.
-   */
-  let videoPath: string | null = null;
-  if (input.capture.videoUri) {
-    videoPath = await upload(input.capture.videoUri, userId, 'video/quicktime');
-  }
-  let selfiePath: string | null = null;
-  if (selfie) {
-    try {
-      selfiePath = await upload(selfie.uri, userId);
-    } catch {
-      // The selfie is a nice-to-have; losing it should not sink the post.
-      selfiePath = null;
+    onProgress?.('uploading');
+    /*
+     * Wait for every upload, even when one fails. Promise.all() returned as
+     * soon as the first request rejected, while the others kept writing in
+     * the background; cleanup could then run too early and miss those late
+     * objects. allSettled gives rollback a complete list.
+     *
+     * The clip is uploaded as it came off the camera. The device already
+     * wrote H.264 at a sane bitrate, and a second pass would cost seconds to
+     * save megabytes that the ten-second cap has already bounded.
+     */
+    const uploads = await Promise.allSettled([
+      upload(image.uri, userId),
+      upload(image.thumbnailUri, userId),
+      upload(image.previewUri, userId),
+      input.capture.videoUri
+        ? upload(input.capture.videoUri, userId, 'video/quicktime')
+        : Promise.resolve(null),
+      selfie ? upload(selfie.uri, userId) : Promise.resolve(null),
+    ]);
+
+    for (const result of uploads) {
+      if (result.status === 'fulfilled' && result.value) uploadedPaths.push(result.value);
     }
-  }
 
-  onProgress?.('saving');
-  const { data, error } = await supabase.rpc('create_post', {
-    p_album_id: input.albumId,
-    p_image_path: imagePath,
-    // These arguments have SQL defaults, so the generated types accept
-    // undefined rather than null.
-    p_selfie_path: selfiePath ?? undefined,
-    p_title: input.title.trim() || undefined,
-    p_description: input.description.trim() || undefined,
-    p_location: input.location.trim() || undefined,
-    p_taken_at: input.takenAt.toISOString(),
-    p_exif: (jsonbSafe(input.capture.exif) ?? undefined) as never,
-    p_blurhash: image.blurhash,
-    p_luminance: image.luminance,
-    p_latitude: input.coordinates?.latitude ?? undefined,
-    p_longitude: input.coordinates?.longitude ?? undefined,
-    p_video_path: videoPath ?? undefined,
-    p_thumbnail_path: thumbnailPath,
-    p_rating: input.rating ?? undefined,
-    // Kept for backwards-compatible RPC/database shape. New posts are always
-    // stored unfiltered now that the filter picker has been removed.
-    p_filter_name: 'original',
-    // Sent as five separate arguments rather than a composite, because the RPC
-    // mirrors the columns and Postgres has no row type to hand it here.
-    p_music_track_id: input.music?.trackId ?? undefined,
-    p_music_title: input.music?.title ?? undefined,
-    p_music_artist: input.music?.artist ?? undefined,
-    p_music_artwork_url: input.music?.artworkUrl ?? undefined,
-    p_music_preview_url: input.music?.previewUrl ?? undefined,
-    p_venue_name: input.venue?.name ?? undefined,
-    p_venue_category: input.venue?.category ?? undefined,
-    p_venue_address: input.venue?.address || undefined,
-    p_venue_latitude: input.venue?.latitude ?? undefined,
-    p_venue_longitude: input.venue?.longitude ?? undefined,
-    // Normalised at the boundary rather than in the form, so a link only ever
-    // reaches the database in the one shape the column's constraint accepts.
-    p_link: normaliseLink(input.link) ?? undefined,
-  });
+    // Main, map thumbnail and feed preview are required. A requested video is
+    // required too; only the companion selfie remains deliberately optional.
+    for (const index of [0, 1, 2, ...(input.capture.videoUri ? [3] : [])]) {
+      const result = uploads[index];
+      if (result.status === 'rejected') throw result.reason;
+    }
 
-  if (error) {
-    // The row never landed, so the uploaded bytes are orphaned. Clean up rather
-    // than leaving them to count against the user's storage forever.
-    await supabase.storage
-      .from(BUCKET)
-      .remove([
-        imagePath,
-        thumbnailPath,
-        ...(selfiePath ? [selfiePath] : []),
-        ...(videoPath ? [videoPath] : []),
-      ]);
+    const imagePath = uploads[0].status === 'fulfilled' ? uploads[0].value : null;
+    const thumbnailPath = uploads[1].status === 'fulfilled' ? uploads[1].value : null;
+    const previewPath = uploads[2].status === 'fulfilled' ? uploads[2].value : null;
+    const videoPath = uploads[3].status === 'fulfilled' ? uploads[3].value : null;
+    const selfiePath = uploads[4].status === 'fulfilled' ? uploads[4].value : null;
+    if (!imagePath || !thumbnailPath || !previewPath) {
+      throw new Error('Klarte ikke å laste opp bildevariantene.');
+    }
+
+    onProgress?.('saving');
+    const { data, error } = await supabase.rpc('create_post', {
+      p_album_id: input.albumId,
+      p_image_path: imagePath,
+      // These arguments have SQL defaults, so the generated types accept
+      // undefined rather than null.
+      p_selfie_path: selfiePath ?? undefined,
+      p_title: input.title.trim() || undefined,
+      p_description: input.description.trim() || undefined,
+      p_location: input.location.trim() || undefined,
+      p_taken_at: input.takenAt.toISOString(),
+      p_exif: (jsonbSafe(input.capture.exif) ?? undefined) as never,
+      p_blurhash: image.blurhash,
+      p_luminance: image.luminance,
+      p_latitude: input.coordinates?.latitude ?? undefined,
+      p_longitude: input.coordinates?.longitude ?? undefined,
+      p_video_path: videoPath ?? undefined,
+      p_thumbnail_path: thumbnailPath,
+      p_preview_path: previewPath,
+      p_rating: input.rating ?? undefined,
+      // Kept for backwards-compatible RPC/database shape. New posts are always
+      // stored unfiltered now that the filter picker has been removed.
+      p_filter_name: 'original',
+      // Sent as five separate arguments rather than a composite, because the RPC
+      // mirrors the columns and Postgres has no row type to hand it here.
+      p_music_track_id: input.music?.trackId ?? undefined,
+      p_music_title: input.music?.title ?? undefined,
+      p_music_artist: input.music?.artist ?? undefined,
+      p_music_artwork_url: input.music?.artworkUrl ?? undefined,
+      p_music_preview_url: input.music?.previewUrl ?? undefined,
+      p_venue_name: input.venue?.name ?? undefined,
+      p_venue_category: input.venue?.category ?? undefined,
+      p_venue_address: input.venue?.address || undefined,
+      p_venue_latitude: input.venue?.latitude ?? undefined,
+      p_venue_longitude: input.venue?.longitude ?? undefined,
+      // Normalised at the boundary rather than in the form, so a link only ever
+      // reaches the database in the one shape the column's constraint accepts.
+      p_link: normaliseLink(input.link) ?? undefined,
+    });
+
+    if (error) throw error;
+
+    committed = true;
+    notify('post', data.id);
+    return data.id;
+  } catch (error) {
+    if (!committed && uploadedPaths.length > 0) {
+      // Best effort: preserve the original error even if Storage cleanup has
+      // its own transient failure. Every completed concurrent upload is known
+      // here, including ones that finished after a sibling failed.
+      try {
+        await supabase.storage.from(BUCKET).remove(uploadedPaths);
+      } catch {
+        // The publish error is the actionable one and must reach the screen.
+      }
+    }
     throw error;
+  } finally {
+    removeLocalFiles(generatedUris);
   }
-
-  notify('post', data.id);
-  return data.id;
 }
 
 export type WritableAlbum = {

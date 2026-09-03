@@ -7,6 +7,7 @@ import { Icon } from '@/components/icon';
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import type { AlbumPost } from '@/lib/album';
+import { storageImageSource } from '@/lib/images';
 
 const COLUMNS = 4;
 const GAP = 3;
@@ -103,7 +104,10 @@ export function PostGridSheet({
                       // The small copy, not the full image. A tile is a quarter
                       // of the screen's width; the full one is up to 2048px, so
                       // this asks for about a hundredth of the bytes.
-                      source={{ uri: item.thumbnailUrl }}
+                      source={storageImageSource(
+                        item.thumbnail_path ?? item.image_path,
+                        item.thumbnailUrl
+                      )}
                       placeholder={item.blurhash ? { blurhash: item.blurhash } : undefined}
                       // The blurhash is there to be shown while the tile
                       // loads, so let it: without this expo-image holds the

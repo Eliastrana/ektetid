@@ -49,6 +49,7 @@ import {
 } from '@/lib/chrome-hiding';
 import { fetchNextAlbum, type NextAlbum } from '@/lib/feed';
 import { decodeOrigin } from '@/lib/origin';
+import { prefetchStorageImages, storageImageSource } from '@/lib/images';
 import type { ReportTarget } from '@/lib/moderation';
 import {
   fetchLikes,
@@ -121,6 +122,8 @@ export default function AlbumScreen() {
     cover?: string;
     /** Its blurhash, for the case where the cover is not cached after all. */
     cb?: string;
+    /** Stable storage path for the cover, independent of its signed URL. */
+    cp?: string;
     /** Open a particular post when coming from the vertical stream. */
     post?: string;
     /** Set to 'next' when arriving from the album before this one. */
@@ -460,12 +463,13 @@ export default function AlbumScreen() {
     setSwapped(false);
   }, [handover, id, params.from, translateX, width]);
 
-  // Preload the neighbours so advancing feels instant.
+  // Preload the neighbours so advancing feels instant. Their object paths are
+  // stable cache keys; the signed URLs are only temporary authorisation.
   useEffect(() => {
-    const urls = [posts[index + 1]?.imageUrl, posts[index + 2]?.imageUrl].filter(
-      (url): url is string => !!url
+    const neighbours = [posts[index + 1], posts[index + 2]].flatMap((post) =>
+      post?.imageUrl ? [{ path: post.image_path, url: post.imageUrl }] : []
     );
-    if (urls.length) void Image.prefetch(urls);
+    if (neighbours.length) void prefetchStorageImages(neighbours).catch(() => {});
   }, [index, posts]);
 
   // Persist read position as it advances.
@@ -599,8 +603,12 @@ export default function AlbumScreen() {
     let active = true;
     void prefetchAlbum(nextAlbum.id).then((detail) => {
       if (!active || !detail || detail.posts.length === 0) return;
-      const url = detail.posts[openingIndex(detail)]?.imageUrl;
-      if (url) void Image.prefetch(url);
+      const post = detail.posts[openingIndex(detail)];
+      if (post?.imageUrl) {
+        void prefetchStorageImages([{ path: post.image_path, url: post.imageUrl }]).catch(
+          () => {}
+        );
+      }
     });
     return () => {
       active = false;
@@ -615,6 +623,7 @@ export default function AlbumScreen() {
           id: target.id,
           from: 'next',
           ...(target.coverUrl ? { cover: target.coverUrl } : {}),
+          ...(target.coverPath ? { cp: target.coverPath } : {}),
           ...(target.coverBlurhash ? { cb: target.coverBlurhash } : {}),
         },
       });
@@ -965,7 +974,12 @@ export default function AlbumScreen() {
     return shell(
       params.cover ? (
         <Image
-          source={{ uri: params.cover }}
+          source={
+            params.cp
+              ? storageImageSource(params.cp, params.cover)
+              : { uri: params.cover }
+          }
+          cachePolicy="memory-disk"
           placeholder={params.cb ? { blurhash: params.cb } : undefined}
           contentFit="cover"
           // No fade — it would run against the growing shell and muddy it.
@@ -1041,7 +1055,12 @@ export default function AlbumScreen() {
             />
           ) : current?.imageUrl ? (
             <Image
-              source={{ uri: swapped && current.selfieUrl ? current.selfieUrl : current.imageUrl }}
+              source={
+                swapped && current.selfieUrl && current.selfie_path
+                  ? storageImageSource(current.selfie_path, current.selfieUrl)
+                  : storageImageSource(current.image_path, current.imageUrl)
+              }
+              cachePolicy="memory-disk"
               // The blurhash describes the photo, so it is only a placeholder
               // for the photo — over the selfie it would be the wrong colours.
               placeholder={

@@ -164,7 +164,23 @@
         "expo-widgets",
         {
           "bundleIdentifier": "com.eliastrana.ektetid.widgets",
-          "groupIdentifier": "group.com.eliastrana.ektetid"
+          "groupIdentifier": "group.com.eliastrana.ektetid",
+          "widgets": [
+            {
+              "name": "QuickCameraWidget",
+              "displayName": "Ta bilde",
+              "description": "Åpner EkteTid-kameraet med ett trykk.",
+              "contentMarginsDisabled": true,
+              "supportedFamilies": ["systemSmall"]
+            },
+            {
+              "name": "RecentFriendsWidget",
+              "displayName": "Nylig fra venner",
+              "description": "Viser de siste innleggene fra opptil fire venner.",
+              "contentMarginsDisabled": true,
+              "supportedFamilies": ["systemMedium"]
+            }
+          ]
         }
       ],
       "expo-iap",

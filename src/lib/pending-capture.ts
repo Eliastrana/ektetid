@@ -6,26 +6,13 @@
  * a route would be both lossy and slow.
  */
 
-export type PendingCapture = {
-  /**
-   * Always a still.
-   *
-   * For a video post this is the first frame, extracted before publishing, so
-   * that the grid, the map pin, the blurhash and the notification all have a
-   * picture to work with without knowing anything about video.
-   */
-  imageUri: string;
-  /** The clip when the user selected Video and tapped the shutter. */
-  videoUri: string | null;
-  selfieUri: string | null;
-  exif: Record<string, unknown> | null;
-  width: number;
-  height: number;
-};
+import type { PendingCapture } from '@/lib/pending-capture.types';
+
+export type { PendingCapture } from '@/lib/pending-capture.types';
 
 let pending: PendingCapture | null = null;
 
-export function setPendingCapture(capture: PendingCapture): void {
+export async function setPendingCapture(capture: PendingCapture): Promise<void> {
   pending = capture;
 }
 

@@ -88,17 +88,19 @@ function PinFrame({
 /** A single moment: its photo, filling the well. */
 export function PhotoPin({
   uri,
+  cacheKey,
   onLoaded,
   onError,
 }: {
   uri: string;
+  cacheKey: string;
   onLoaded?: () => void;
   onError?: () => void;
 }) {
   return (
     <PinFrame>
       <Image
-        source={{ uri }}
+        source={{ uri, cacheKey: `storage:${cacheKey}` }}
         style={{ width: '100%', height: '100%' }}
         cachePolicy="memory-disk"
         allowDownscaling

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo-google-fonts/gravitas-one": "^0.4.1",
-    "@expo/ui": "~57.0.14",
+    "@expo/ui": "~57.0.15",
     "@react-native-segmented-control/segmented-control": "2.5.7",
     "@supabase/supabase-js": "^2.110.8",
     "blurhash": "^2.0.5",
@@ -40,7 +40,7 @@
     "expo-video": "~57.0.3",
     "expo-video-thumbnails": "~57.0.1",
     "expo-web-browser": "~57.0.2",
-    "expo-widgets": "~57.0.10",
+    "expo-widgets": "~57.0.16",
     "jpeg-js": "^0.4.4",
     "nativewind": "^5.0.0-preview.4",
     "react": "19.2.3",
@@ -83,7 +83,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test:db": "for f in supabase/tests/*.sql; do echo \"── $f\"; docker exec -i supabase_db_ektetid psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < \"$f\" || exit 1; done",
-    "backfill:map-thumbnails": "node scripts/backfill-map-thumbnails.mjs"
+    "backfill:map-thumbnails": "node scripts/backfill-map-thumbnails.mjs",
+    "backfill:feed-previews": "node scripts/backfill-feed-previews.mjs"
   },
   "private": true
 }

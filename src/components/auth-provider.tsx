@@ -2,6 +2,8 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import type { Profile } from '@/lib/database.types';
+import { clearPrivateImageCaches } from '@/lib/images';
+import { clearPendingCapture } from '@/lib/pending-capture';
 import { secureStorage } from '@/lib/secure-storage';
 import { supabase } from '@/lib/supabase';
 
@@ -68,7 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, next) => {
+      // Signed image URLs are bearer credentials, and their decoded bytes may
+      // still be in expo-image's native caches. Keep relaunches fast, but clear
+      // both layers when the user deliberately leaves the account.
+      if (event === 'SIGNED_OUT') {
+        clearPendingCapture();
+        void clearPrivateImageCaches();
+      }
       setSession(next);
       setInitializing(true);
       void Promise.all([loadProfile(next?.user.id), loadOnboarding(next?.user.id)]).finally(() => {

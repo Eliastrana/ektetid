@@ -10,7 +10,10 @@ export type ProfileStats = {
   heartsReceived: number;
 };
 
-export type OwnAlbum = AlbumFeedRow & { coverUrl: string | null };
+export type OwnAlbum = AlbumFeedRow & {
+  coverUrl: string | null;
+  coverPreviewPath: string | null;
+};
 
 /**
  * Counts for the profile header.
@@ -55,12 +58,16 @@ export async function fetchOwnAlbums(userId: string): Promise<OwnAlbum[]> {
   if (error) throw error;
 
   const paths = data
-    .map((album) => album.cover_image_path)
+    .map((album) => album.cover_preview_path ?? album.cover_image_path)
     .filter((path): path is string => !!path);
   const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
 
   return data.map((album) => ({
     ...album,
-    coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
+    coverPreviewPath: album.cover_preview_path ?? album.cover_image_path ?? null,
+    coverUrl:
+      album.cover_preview_path || album.cover_image_path
+        ? (urls.get(album.cover_preview_path ?? album.cover_image_path!) ?? null)
+        : null,
   }));
 }

@@ -192,6 +192,7 @@ export default function FeedScreen() {
                       // Lets the opening animation show the photo immediately
                       // rather than growing an empty rectangle.
                       ...(item.coverUrl ? { cover: item.coverUrl } : {}),
+                      ...(item.coverPreviewPath ? { cp: item.coverPreviewPath } : {}),
                       ...(item.cover_blurhash ? { cb: item.cover_blurhash } : {}),
                     },
                   })

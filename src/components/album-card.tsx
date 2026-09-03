@@ -7,6 +7,7 @@ import { Avatar } from '@/components/avatar';
 import { Scrim } from '@/components/scrim';
 import { albumCoverLayout } from '@/lib/album-customization';
 import type { FeedAlbum } from '@/lib/feed';
+import { storageImageSource } from '@/lib/images';
 import { measureOrigin, type Origin } from '@/lib/origin';
 
 const EDITORIAL_SERIF = 'GravitasOne_400Regular';
@@ -83,7 +84,11 @@ export function AlbumCard({
         }>
         {album.coverUrl ? (
           <Image
-            source={{ uri: album.coverUrl }}
+            source={storageImageSource(
+              album.coverPreviewPath ?? album.cover_image_path!,
+              album.coverUrl
+            )}
+            cachePolicy="memory-disk"
             placeholder={album.cover_blurhash ? { blurhash: album.cover_blurhash } : undefined}
             transition={200}
             contentFit="cover"

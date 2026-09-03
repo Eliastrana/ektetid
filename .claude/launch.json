@@ -9,6 +9,17 @@
         "start"
       ],
       "port": 8081
+    },
+    {
+      "name": "ektetid-landing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/eliastrana/WebstormProjects/capture/capture",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

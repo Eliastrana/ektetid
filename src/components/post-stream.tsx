@@ -19,6 +19,7 @@ import {
   toggleLike,
   type PostSocialCounts,
 } from '@/lib/social';
+import { storageImageSource } from '@/lib/images';
 
 function StreamSkeleton() {
   return (
@@ -66,13 +67,14 @@ function PostCard({
               id: item.album.id,
               post: item.id,
               cover: item.imageUrl,
+              cp: item.image_path,
               ...(item.blurhash ? { cb: item.blurhash } : {}),
             },
           })
         }>
         <View className="aspect-[3/4] bg-surface-raised">
           <Image
-            source={{ uri: item.imageUrl }}
+            source={storageImageSource(item.image_path, item.imageUrl)}
             placeholder={item.blurhash ? { blurhash: item.blurhash } : undefined}
             cachePolicy="memory-disk"
             contentFit="cover"

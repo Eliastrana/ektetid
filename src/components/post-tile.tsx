@@ -19,6 +19,7 @@ import { GlassPill } from '@/components/glass-pill';
 import { Icon } from '@/components/icon';
 import { NativePostButton } from '@/components/native-post-button';
 import { linkLabel } from '@/lib/link';
+import { storageImageSource } from '@/lib/images';
 import { fromPostVenue, venueMapsUrl } from '@/lib/venue';
 
 type Props = {
@@ -428,7 +429,12 @@ export function PostTile({
                   ]}>
                   <Image
                     // Whichever one the album is not showing full screen.
-                    source={{ uri: swapped ? (post.imageUrl ?? '') : post.selfieUrl }}
+                    source={
+                      swapped && post.imageUrl
+                        ? storageImageSource(post.image_path, post.imageUrl)
+                        : storageImageSource(post.selfie_path!, post.selfieUrl)
+                    }
+                    cachePolicy="memory-disk"
                     contentFit="cover"
                     transition={150}
                     style={{ width: '100%', height: '100%' }}

@@ -159,7 +159,7 @@ export default function CameraScreen() {
       const selfieUri = await captureSelfie();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      setPendingCapture({
+      await setPendingCapture({
         imageUri: poster.uri,
         videoUri: clip.uri,
         selfieUri,
@@ -223,7 +223,7 @@ export default function CameraScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      setPendingCapture({
+      await setPendingCapture({
         imageUri: main.uri,
         videoUri: null,
         selfieUri,
@@ -280,7 +280,7 @@ export default function CameraScreen() {
 
     const asset = result.assets[0];
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPendingCapture({
+    await setPendingCapture({
       imageUri: asset.uri,
       videoUri: null,
       selfieUri: null,

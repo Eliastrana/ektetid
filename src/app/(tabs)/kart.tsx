@@ -21,6 +21,7 @@ import {
 } from '@/lib/map';
 import { countIconId, PinFactory } from '@/components/pin-factory';
 import type { ImageRef } from 'expo-image';
+import { storageImageSource } from '@/lib/images';
 
 const FILTERS: { value: MapFilter; label: string }[] = [
   { value: 'all', label: 'Alle' },
@@ -490,6 +491,7 @@ export default function MapScreen() {
                     // on the map showed a different one.
                     post: selected.id,
                     ...(selected.imageUrl ? { cover: selected.imageUrl } : {}),
+                    ...(selected.imageUrl ? { cp: selected.imagePath } : {}),
                     ...(selected.blurhash ? { cb: selected.blurhash } : {}),
                   },
                 })
@@ -497,7 +499,8 @@ export default function MapScreen() {
               className="flex-row items-center gap-3 rounded-tile bg-surface p-3 active:opacity-80">
               {selected.imageUrl ? (
                 <Image
-                  source={{ uri: selected.imageUrl }}
+                  source={storageImageSource(selected.imagePath, selected.imageUrl)}
+                  cachePolicy="memory-disk"
                   placeholder={selected.blurhash ? { blurhash: selected.blurhash } : undefined}
                   style={{ width: 56, height: 74, borderRadius: 8 }}
                   contentFit="cover"

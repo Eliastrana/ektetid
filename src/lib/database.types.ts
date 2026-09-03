@@ -397,6 +397,7 @@ export type Database = {
           venue_longitude: number | null
           venue_name: string | null
           position: number
+          preview_path: string | null
           rating: number | null
           selfie_path: string | null
           taken_at: string
@@ -430,6 +431,7 @@ export type Database = {
           venue_longitude?: number | null
           venue_name?: string | null
           position: number
+          preview_path?: string | null
           rating?: number | null
           selfie_path?: string | null
           taken_at?: string
@@ -463,6 +465,7 @@ export type Database = {
           venue_longitude?: number | null
           venue_name?: string | null
           position?: number
+          preview_path?: string | null
           rating?: number | null
           selfie_path?: string | null
           taken_at?: string
@@ -721,6 +724,7 @@ export type Database = {
           cover_image_path: string | null
           cover_layout: string | null
           cover_post_id: string | null
+          cover_preview_path: string | null
           cover_taken_at: string | null
           created_at: string | null
           description: string | null
@@ -787,6 +791,7 @@ export type Database = {
           p_longitude?: number
           p_luminance?: number
           p_rating?: number
+          p_preview_path?: string
           p_selfie_path?: string
           p_taken_at?: string
           p_title?: string
@@ -819,6 +824,7 @@ export type Database = {
           venue_longitude: number | null
           venue_name: string | null
           position: number
+          preview_path: string | null
           rating: number | null
           selfie_path: string | null
           taken_at: string
@@ -862,6 +868,18 @@ export type Database = {
           image_path: string
           taken_at: string
           title: string
+        }[]
+      }
+      recent_friend_posts: {
+        Args: { p_limit?: number }
+        Returns: {
+          album_id: string
+          album_title: string
+          author_id: string
+          display_name: string | null
+          post_id: string
+          posted_at: string
+          username: string
         }[]
       }
       record_post_view: { Args: { p_post_id: string }; Returns: undefined }

@@ -2,16 +2,18 @@ import '@/global.css';
 
 import { GravitasOne_400Regular } from '@expo-google-fonts/gravitas-one/400Regular';
 import { useFonts } from 'expo-font';
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { AuthProvider, useAuth } from '@/components/auth-provider';
 import { AppBootSkeleton } from '@/components/skeleton';
+import { useHomeWidgets } from '@/lib/home-widgets';
 import { useNotificationRouting } from '@/lib/use-notification-routing';
+import { getPendingCapture } from '@/lib/pending-capture';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,13 +44,23 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { session, initializing, needsUsername, onboardingComplete } = useAuth();
+  const router = useRouter();
+  const checkedDraft = useRef(false);
+  const protectedRoutesReady =
+    !!session && !initializing && !needsUsername && onboardingComplete;
+  // Do not clear a previous session's widget while auth is still restoring.
+  useHomeWidgets(initializing ? undefined : (session?.user.id ?? null));
 
   // Tapping a notification should land on the thing it is about, not the feed.
   // Wait until the protected routes exist; routing during session restoration
   // made a notification tap appear to load forever without opening anything.
-  useNotificationRouting(
-    !!session && !initializing && !needsUsername && onboardingComplete
-  );
+  useNotificationRouting(protectedRoutesReady);
+
+  useEffect(() => {
+    if (!protectedRoutesReady || checkedDraft.current) return;
+    checkedDraft.current = true;
+    if (getPendingCapture()) router.replace('/nytt-innlegg');
+  }, [protectedRoutesReady, router]);
 
   // Hold the splash until we know whether there is a stored session, so the
   // sign-in screen never flashes for an already-signed-in user.

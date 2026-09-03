@@ -17,6 +17,7 @@ import { ShareCard, type ShareTarget } from '@/components/share-card';
 import { AlbumEditSkeleton } from '@/components/skeleton';
 import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
+import { storageImageSource } from '@/lib/images';
 import {
   addMember,
   deleteAlbum,
@@ -572,7 +573,9 @@ export default function EditAlbumScreen() {
                 setSharing({
                   albumTitle: album.title,
                   imageUrl: item.imageUrl,
+                  imagePath: item.imagePath,
                   selfieUrl: item.selfieUrl,
+                  selfiePath: item.selfiePath,
                   title: item.title,
                   takenAt: item.takenAt,
                   location: item.location,
@@ -668,7 +671,8 @@ function PostRow({
           disabled={!canCustomize}
           onPress={onSelectCover}>
           <Image
-            source={{ uri: post.imageUrl }}
+            source={storageImageSource(post.imagePath, post.imageUrl)}
+            cachePolicy="memory-disk"
             placeholder={post.blurhash ? { blurhash: post.blurhash } : undefined}
             style={{
               width: 52,

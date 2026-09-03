@@ -64,7 +64,7 @@ export async function fetchPublicProfile(
 
   const albums = albumRows.data ?? [];
   const paths = albums
-    .map((album) => album.cover_image_path)
+    .map((album) => album.cover_preview_path ?? album.cover_image_path)
     .filter((path): path is string => !!path);
   const urls = paths.length ? await signedUrls(paths) : new Map<string, string>();
 
@@ -76,7 +76,11 @@ export async function fetchPublicProfile(
     heartsReceived: hearts.count ?? 0,
     visibleAlbums: albums.map((album) => ({
       ...album,
-      coverUrl: album.cover_image_path ? (urls.get(album.cover_image_path) ?? null) : null,
+      coverPreviewPath: album.cover_preview_path ?? album.cover_image_path ?? null,
+      coverUrl:
+        album.cover_preview_path || album.cover_image_path
+          ? (urls.get(album.cover_preview_path ?? album.cover_image_path!) ?? null)
+          : null,
     })),
     isPro,
   };

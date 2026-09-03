@@ -9,6 +9,7 @@ export type MemoryPost = {
   description: string | null;
   takenAt: string;
   imageUrl: string | null;
+  imagePath: string;
   blurhash: string | null;
 };
 
@@ -46,6 +47,7 @@ export async function fetchMemories(): Promise<MemoryPost[]> {
     description: post.description,
     takenAt: post.taken_at,
     imageUrl: urls.get(post.image_path) ?? null,
+    imagePath: post.image_path,
     blurhash: post.blurhash,
   }));
 }

@@ -1,11 +1,11 @@
 /**
- * One-time backfill for posts created before thumbnail_path existed.
+ * One-time backfill for posts created before preview_path existed.
  *
  * Usage (service-role credentials are required because the script updates
  * every user's private media):
- *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npm run backfill:map-thumbnails
+ *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npm run backfill:feed-previews
  *
- * It is idempotent: rows that already have a thumbnail are skipped, and the
+ * It is idempotent: rows that already have a preview are skipped, and the
  * object name is derived from the original path so reruns use the same target.
  */
 
@@ -28,7 +28,7 @@ for (;;) {
   const { data: posts, error } = await supabase
     .from('posts')
     .select('id, image_path')
-    .is('thumbnail_path', null)
+    .is('preview_path', null)
     .order('created_at')
     .limit(100);
   if (error) throw error;
@@ -39,11 +39,11 @@ for (;;) {
     if (downloadError) throw downloadError;
 
     const bytes = await sharp(await original.arrayBuffer())
-      .resize({ width: 192, withoutEnlargement: true })
-      .jpeg({ quality: 72, mozjpeg: true })
+      .resize({ width: 768, withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer();
-    const thumbnailPath = post.image_path.replace(/\.[^.]+$/, '.map-thumb.jpg');
-    const { error: uploadError } = await bucket.upload(thumbnailPath, bytes, {
+    const previewPath = post.image_path.replace(/\.[^.]+$/, '.feed-preview.jpg');
+    const { error: uploadError } = await bucket.upload(previewPath, bytes, {
       contentType: 'image/jpeg',
       cacheControl: '31536000',
       upsert: true,
@@ -52,13 +52,13 @@ for (;;) {
 
     const { error: updateError } = await supabase
       .from('posts')
-      .update({ thumbnail_path: thumbnailPath })
+      .update({ preview_path: previewPath })
       .eq('id', post.id)
-      .is('thumbnail_path', null);
+      .is('preview_path', null);
     if (updateError) throw updateError;
     processed += 1;
     console.log(`Backfilled ${processed}: ${post.id}`);
   }
 }
 
-console.log(`Done. ${processed} map thumbnails created.`);
+console.log(`Done. ${processed} feed previews created.`);

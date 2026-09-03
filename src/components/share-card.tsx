@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { File } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -7,6 +8,7 @@ import { captureRef } from 'react-native-view-shot';
 
 import { Dice } from '@/components/dice';
 import { formatNorwegianDate } from '@/components/post-tile';
+import { storageImageSource } from '@/lib/images';
 
 /**
  * The card's laid-out size, and the size it is written at.
@@ -46,7 +48,9 @@ const SELFIE_HEIGHT = 99;
 export type ShareTarget = {
   albumTitle: string;
   imageUrl: string | null;
+  imagePath: string;
   selfieUrl: string | null;
+  selfiePath: string | null;
   title: string | null;
   takenAt: string;
   location: string | null;
@@ -106,6 +110,7 @@ export function ShareCard({
   const capture = useCallback(async () => {
     if (started.current || finished.current || !host.current) return;
     started.current = true;
+    let uri: string | null = null;
     try {
       // Asked before the work rather than after it: composing and encoding a
       // 1080px card only to discover there is nowhere to send it wastes the
@@ -115,7 +120,7 @@ export function ShareCard({
         return;
       }
 
-      const uri = await captureRef(host, {
+      uri = await captureRef(host, {
         format: 'jpg',
         quality: 0.95,
         width: CARD_WIDTH * EXPORT_SCALE,
@@ -133,6 +138,15 @@ export function ShareCard({
       settle();
     } catch {
       settle('Klarte ikke å lage bildet.');
+    } finally {
+      if (uri) {
+        try {
+          const file = new File(uri);
+          if (file.exists) file.delete();
+        } catch {
+          // Sharing already completed or failed; stale export cleanup is best effort.
+        }
+      }
     }
   }, [settle, target.albumTitle, target.title]);
 
@@ -181,7 +195,8 @@ export function ShareCard({
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, backgroundColor: '#000000' }}>
         {target.imageUrl ? (
           <Image
-            source={{ uri: target.imageUrl }}
+            source={storageImageSource(target.imagePath, target.imageUrl)}
+            cachePolicy="memory-disk"
             style={{ position: 'absolute', inset: 0 }}
             contentFit="cover"
             // No fade: a transition would still be running at capture time and
@@ -221,7 +236,8 @@ export function ShareCard({
 
         {target.selfieUrl ? (
           <Image
-            source={{ uri: target.selfieUrl }}
+            source={storageImageSource(target.selfiePath!, target.selfieUrl)}
+            cachePolicy="memory-disk"
             style={{
               position: 'absolute',
               right: 18,

@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef, useState } from 'react';
+import { useEvent, useEventListener } from 'expo';
+import { useVideoPlayer } from 'expo-video';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/bottom-sheet';
+import { Icon } from '@/components/icon';
 import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import { errorMessage } from '@/lib/errors';
@@ -53,7 +56,9 @@ const TOP_MARGIN = 44;
  * Search Apple's catalogue and pick a thirty-second snippet.
  *
  * Only tracks with a preview are offered — a result we cannot play is a result
- * that would attach silence, which is worse than not offering it.
+ * that would attach silence, which is worse than not offering it. And nobody
+ * has to take that on faith: tapping the artwork plays the same preview that
+ * would end up on the post, before anything is chosen.
  */
 export function MusicPicker({
   visible,
@@ -81,6 +86,52 @@ export function MusicPicker({
 
   /** The in-flight request, so a slower earlier search cannot overwrite a newer one. */
   const inFlight = useRef<AbortController | null>(null);
+
+  /**
+   * One player for the whole list, not one per row.
+   *
+   * Only one preview can ever be sensibly audible at a time, so there is only
+   * ever one to manage. `null` at rest: expo-video is asked to load a real
+   * source with `replaceAsync` the first time something is tapped, rather than
+   * every row's preview being fetched before anyone has asked for it.
+   */
+  const player = useVideoPlayer(null, (instance) => {
+    instance.loop = false;
+  });
+
+  /** Which track the player currently holds, so a row knows if it owns it. */
+  const [previewTrackId, setPreviewTrackId] = useState<number | null>(null);
+
+  /** The player's own truth, not a copy of it — this is what a row actually shows. */
+  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+
+  // A thirty-second preview reaching its end pauses the player without
+  // rewinding it. Left alone, tapping the same row again would call `play`
+  // on a player already sitting at its last frame and do nothing visible.
+  useEventListener(player, 'playToEnd', () => {
+    player.currentTime = 0;
+  });
+
+  const togglePreview = useCallback(
+    (track: MusicTrack) => {
+      void Haptics.selectionAsync();
+
+      if (previewTrackId === track.trackId) {
+        if (player.playing) {
+          player.pause();
+        } else {
+          // Paused, or just finished — either way this is the track already
+          // loaded, so resuming needs no new request.
+          player.play();
+        }
+        return;
+      }
+
+      setPreviewTrackId(track.trackId);
+      void player.replaceAsync(track.previewUrl).then(() => player.play());
+    },
+    [player, previewTrackId]
+  );
 
   /**
    * The sheet's height, measured against the keyboard rather than fixed.
@@ -126,6 +177,10 @@ export function MusicPicker({
       setRows([]);
       setError(null);
       setSearched(false);
+      // The sheet stays mounted behind a Modal's own visible flag, so closing
+      // it does not stop whatever was playing on its own.
+      player.pause();
+      setPreviewTrackId(null);
       return;
     }
 
@@ -138,7 +193,7 @@ export function MusicPicker({
       // still there and still the point of the sheet.
       .catch(() => {});
     return () => controller.abort();
-  }, [visible]);
+  }, [player, visible]);
 
   useEffect(() => {
     const query = term.trim();
@@ -250,36 +305,92 @@ export function MusicPicker({
             )
           }
           renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Velg ${item.title} av ${item.artist}`}
-              onPress={() => {
+            <TrackRow
+              track={item}
+              playing={previewTrackId === item.trackId && isPlaying}
+              onTogglePreview={() => togglePreview(item)}
+              onSelect={() => {
                 void Haptics.selectionAsync();
+                player.pause();
                 onPick(item);
               }}
-              className="flex-row items-center gap-3 rounded-tile bg-glass p-2 active:opacity-70">
-              {item.artworkUrl ? (
-                <Image
-                  source={{ uri: item.artworkUrl }}
-                  style={{ width: 48, height: 48, borderRadius: 6 }}
-                  contentFit="cover"
-                  transition={120}
-                />
-              ) : (
-                <View className="h-12 w-12 rounded-md bg-surface-raised" />
-              )}
-              <View className="min-w-0 flex-1">
-                <Text numberOfLines={1} className="text-base text-ink">
-                  {item.title}
-                </Text>
-                <Text numberOfLines={1} className="text-sm text-muted">
-                  {item.artist}
-                </Text>
-              </View>
-            </Pressable>
+            />
           )}
         />
       </Screen>
     </BottomSheet>
+  );
+}
+
+/**
+ * One result: artwork that plays a preview on tap, and a name that selects it.
+ *
+ * Two separate targets rather than one, because hearing a song and choosing it
+ * are different decisions — collapsing them into a single tap would mean the
+ * first press on a track anyone made was also the last.
+ */
+function TrackRow({
+  track,
+  playing,
+  onTogglePreview,
+  onSelect,
+}: {
+  track: MusicTrack;
+  playing: boolean;
+  onTogglePreview: () => void;
+  onSelect: () => void;
+}) {
+  return (
+    <View className="flex-row items-center gap-3 rounded-tile bg-glass p-2">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          playing ? `Stopp utdraget av ${track.title}` : `Hør utdrag av ${track.title}`
+        }
+        onPress={onTogglePreview}
+        hitSlop={6}
+        className="active:opacity-70">
+        {track.artworkUrl ? (
+          <Image
+            source={{ uri: track.artworkUrl }}
+            style={{ width: 48, height: 48, borderRadius: 6 }}
+            contentFit="cover"
+            transition={120}
+          />
+        ) : (
+          <View className="h-12 w-12 rounded-md bg-surface-raised" />
+        )}
+
+        {/*
+          Shown at rest as well as while playing — this is what says the
+          artwork can be tapped at all. A badge that appeared only once
+          something was already happening would leave the very first tap on
+          any row undiscoverable.
+        */}
+        <View
+          pointerEvents="none"
+          className="absolute bottom-0.5 right-0.5 h-5 w-5 items-center justify-center rounded-full bg-black/60">
+          <Icon
+            name={playing ? 'pause.fill' : 'play.fill'}
+            size={10}
+            tintColor="#ffffff"
+            fallback={<Text className="text-[9px] text-ink">{playing ? '❙❙' : '▶'}</Text>}
+          />
+        </View>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Velg ${track.title} av ${track.artist}`}
+        onPress={onSelect}
+        className="min-w-0 flex-1 active:opacity-70">
+        <Text numberOfLines={1} className="text-base text-ink">
+          {track.title}
+        </Text>
+        <Text numberOfLines={1} className="text-sm text-muted">
+          {track.artist}
+        </Text>
+      </Pressable>
+    </View>
   );
 }

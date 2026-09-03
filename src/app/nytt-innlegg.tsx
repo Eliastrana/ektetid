@@ -18,6 +18,7 @@ import {
 
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
+import { NativePostButton } from '@/components/native-post-button';
 import { Screen } from '@/components/screen';
 import { SelfieSlot } from '@/components/selfie-slot';
 import { ErrorNotice } from '@/components/error-notice';
@@ -25,7 +26,11 @@ import { errorMessage } from '@/lib/errors';
 import { notePublishedPost } from '@/lib/review';
 import { exifCoordinates, type Coordinates } from '@/lib/geo';
 import { archivePublishedCapture } from '@/lib/local-archive';
-import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
+import {
+  clearPendingCapture,
+  getPendingCapture,
+  setPendingCapture,
+} from '@/lib/pending-capture';
 import type { Venue } from '@/../modules/venue-search';
 import { LinkField } from '@/components/link-field';
 import { MusicField } from '@/components/music-field';
@@ -81,6 +86,14 @@ export default function NewPostScreen() {
     exifCoordinates(getPendingCapture()?.exif)
   );
   const [error, setError] = useState<string | null>(null);
+
+  const changeSelfie = useCallback(
+    (uri: string | null) => {
+      setSelfieUri(uri);
+      if (capture) void setPendingCapture({ ...capture, selfieUri: uri });
+    },
+    [capture]
+  );
 
   useEffect(() => {
     if (!userId) return;
@@ -212,14 +225,74 @@ export default function NewPostScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Screen className="flex-1" edges={['bottom']}>
+          {/* Kept inside the modal so the preview retains its full layout. */}
+          <View className="items-center pb-1 pt-2">
+            <View className="h-1 w-10 rounded-full bg-muted opacity-40" />
+          </View>
+
+          {/*
+            Fixed above the scrolling content so publishing is always within
+            reach, even at the bottom of a long form.
+          */}
+          <View className="px-5 pb-3 pt-3">
+            <View className="flex-row items-center justify-between">
+              <NativePostButton
+                label="Avbryt"
+                systemImage="xmark"
+                appearance="glass"
+                disabled={busy}
+                onPress={() => {
+                  clearPendingCapture();
+                  router.back();
+                }}
+              />
+
+              {busy ? (
+                // Same footprint as the button it replaces, so nothing else
+                // in the row shifts while this is showing.
+                <View style={{ height: 44, width: 44 }} className="items-center justify-center">
+                  <ActivityIndicator color="#ffffff" />
+                </View>
+              ) : (
+                <NativePostButton
+                  label="Legg ut"
+                  systemImage="paperplane.fill"
+                  appearance="filled"
+                  tintColor="#ffffff"
+                  // Explicit rather than left to .borderedProminent's own
+                  // contrast rule: on some tints that rule keeps the label
+                  // white regardless of the fill, which on white would be an
+                  // invisible icon on white glass. Black is unambiguous.
+                  foregroundColor="#000000"
+                  disabled={!canPublish}
+                  onPress={() => void publish()}
+                />
+              )}
+            </View>
+
+            {busy ? (
+              <Text className="mt-2 text-center text-xs text-muted">
+                {PROGRESS_LABEL[progress]}
+              </Text>
+            ) : null}
+          </View>
+
           <ScrollView className="flex-1 px-5" keyboardShouldPersistTaps="handled">
-            <View className="mt-4 flex-row gap-3">
+            <View className="relative aspect-[3/4] w-full overflow-hidden rounded-tile">
               <Image
                 source={{ uri: capture.imageUri }}
-                style={{ flex: 1, aspectRatio: 3 / 4, borderRadius: 12 }}
+                style={{ width: '100%', height: '100%' }}
                 contentFit="cover"
               />
-              <SelfieSlot uri={selfieUri} onChange={setSelfieUri} />
+
+              {/*
+                Picture-in-picture, the way the dual capture actually looks:
+                the selfie is the small one, sitting on the corner of the shot
+                it was taken alongside.
+              */}
+              <View style={{ position: 'absolute', right: 12, bottom: 12 }}>
+                  <SelfieSlot uri={selfieUri} onChange={changeSelfie} />
+              </View>
             </View>
 
             <TextInput
@@ -373,37 +446,6 @@ export default function NewPostScreen() {
             ) : null}
             <View className="h-6" />
           </ScrollView>
-
-          <View className="gap-2 px-5 pt-2">
-            <Pressable
-              accessibilityRole="button"
-              disabled={!canPublish}
-              onPress={publish}
-              className={`h-14 flex-row items-center justify-center gap-3 rounded-tile active:opacity-80 ${
-                canPublish ? 'bg-ink' : 'bg-surface-raised'
-              }`}>
-              {busy ? (
-                <>
-                  <ActivityIndicator color="#000000" />
-                  <Text className="text-base text-canvas">{PROGRESS_LABEL[progress]}</Text>
-                </>
-              ) : (
-                <Text className={`text-base ${canPublish ? 'text-canvas' : 'text-muted'}`}>
-                  Legg ut
-                </Text>
-              )}
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={() => {
-                clearPendingCapture();
-                router.back();
-              }}>
-              <Text className="py-2 text-center text-sm text-muted">Avbryt</Text>
-            </Pressable>
-          </View>
         </Screen>
       </KeyboardAvoidingView>
     </View>

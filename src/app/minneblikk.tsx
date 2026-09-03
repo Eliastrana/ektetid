@@ -16,6 +16,7 @@ import {
   type MemoryGroup,
   type MemoryPost,
 } from '@/lib/memories';
+import { storageImageSource } from '@/lib/images';
 
 type MemoryView = 'day' | 'months' | 'years';
 
@@ -59,7 +60,12 @@ export default function MemoriesScreen() {
     (post: MemoryPost) => {
       router.push({
         pathname: '/album/[id]',
-        params: { id: post.albumId, post: post.id },
+        params: {
+          id: post.albumId,
+          post: post.id,
+          ...(post.imageUrl ? { cover: post.imageUrl, cp: post.imagePath } : {}),
+          ...(post.blurhash ? { cb: post.blurhash } : {}),
+        },
       });
     },
     [router]
@@ -211,7 +217,8 @@ function MemoryCard({
           preview.imageUrl ? (
             <Image
               key={preview.id}
-              source={{ uri: preview.imageUrl }}
+              source={storageImageSource(preview.imagePath, preview.imageUrl)}
+              cachePolicy="memory-disk"
               placeholder={preview.blurhash ? { blurhash: preview.blurhash } : undefined}
               contentFit="cover"
               style={{

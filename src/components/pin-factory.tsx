@@ -1,10 +1,12 @@
 import { Image, type ImageRef } from 'expo-image';
+import { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
 import { CountPin, PhotoPin, PIN_HEIGHT, PIN_WIDTH } from '@/components/photo-pin';
 import { MAX_MAP_PHOTO_PINS, type LocatedPost } from '@/lib/map';
+import { prefetchStorageImages } from '@/lib/images';
 
 /** Cached across mounts: capturing the same pin twice is pure waste. */
 const cache = new Map<string, ImageRef>();
@@ -82,8 +84,12 @@ export function PinFactory({ posts, counts, onReady }: Props) {
     // Warm a small leading window. Prefetching all thirty at once can delay the
     // first visible pin on a constrained connection, while the remaining tiny
     // thumbnails will naturally load as their turn reaches the capture host.
-    const urls = wanted.map((post) => post.imageUrl).filter((url): url is string => !!url);
-    if (urls.length) void Image.prefetch(urls.slice(0, 8), 'memory-disk');
+    const warm = wanted
+      .slice(0, 8)
+      .flatMap((post) =>
+        post.imageUrl ? [{ path: post.imagePath, url: post.imageUrl }] : []
+      );
+    if (warm.length) void prefetchStorageImages(warm).catch(() => {});
 
     results.current = new Map();
     const uncached: PendingPin[] = [];
@@ -127,8 +133,9 @@ export function PinFactory({ posts, counts, onReady }: Props) {
     const item = pending;
     if (!item || !hostRef.current || item.run !== activeRun.current) return;
 
+    let uri: string | null = null;
     try {
-      const uri = await captureRef(hostRef, { format: 'png', quality: 1, result: 'tmpfile' });
+      uri = await captureRef(hostRef, { format: 'png', quality: 1, result: 'tmpfile' });
       const ref = await Image.loadAsync({ uri });
       if (item.run !== activeRun.current) return;
 
@@ -143,6 +150,14 @@ export function PinFactory({ posts, counts, onReady }: Props) {
       // This pin keeps the fallback glyph; one bad capture is not worth
       // abandoning the rest.
     } finally {
+      if (uri) {
+        try {
+          const file = new File(uri);
+          if (file.exists) file.delete();
+        } catch {
+          // The decoded native ImageRef is already retained; trim best effort.
+        }
+      }
       next(item.run);
     }
   }, [next, onReady, pending]);
@@ -197,6 +212,7 @@ export function PinFactory({ posts, counts, onReady }: Props) {
               // never report.
               key={pending.post.id}
               uri={pending.post.imageUrl}
+              cacheKey={pending.post.imagePath}
               onLoaded={onImageLoaded}
               onError={onImageError}
             />
