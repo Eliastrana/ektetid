@@ -385,6 +385,17 @@ export type Database = {
           location: string | null
           longitude: number | null
           luminance: number | null
+          music_artist: string | null
+          music_artwork_url: string | null
+          music_preview_url: string | null
+          music_title: string | null
+          music_track_id: number | null
+          link: string | null
+          venue_address: string | null
+          venue_category: string | null
+          venue_latitude: number | null
+          venue_longitude: number | null
+          venue_name: string | null
           position: number
           rating: number | null
           selfie_path: string | null
@@ -407,6 +418,17 @@ export type Database = {
           location?: string | null
           longitude?: number | null
           luminance?: number | null
+          music_artist?: string | null
+          music_artwork_url?: string | null
+          music_preview_url?: string | null
+          music_title?: string | null
+          music_track_id?: number | null
+          link?: string | null
+          venue_address?: string | null
+          venue_category?: string | null
+          venue_latitude?: number | null
+          venue_longitude?: number | null
+          venue_name?: string | null
           position: number
           rating?: number | null
           selfie_path?: string | null
@@ -429,6 +451,17 @@ export type Database = {
           location?: string | null
           longitude?: number | null
           luminance?: number | null
+          music_artist?: string | null
+          music_artwork_url?: string | null
+          music_preview_url?: string | null
+          music_title?: string | null
+          music_track_id?: number | null
+          link?: string | null
+          venue_address?: string | null
+          venue_category?: string | null
+          venue_latitude?: number | null
+          venue_longitude?: number | null
+          venue_name?: string | null
           position?: number
           rating?: number | null
           selfie_path?: string | null
@@ -719,6 +752,17 @@ export type Database = {
       can_see_album: { Args: { album: string }; Returns: boolean }
       can_see_album_media: { Args: { object_name: string }; Returns: boolean }
       can_see_post: { Args: { post: string }; Returns: boolean }
+      trending_music: {
+        Args: { p_limit?: number }
+        Returns: {
+          track_id: number
+          title: string
+          artist: string
+          artwork_url: string
+          preview_url: string
+          uses: number
+        }[]
+      }
       create_post: {
         Args: {
           p_album_id: string
@@ -726,6 +770,17 @@ export type Database = {
           p_description?: string
           p_exif?: Json
           p_filter_name?: string
+          p_music_artist?: string
+          p_music_artwork_url?: string
+          p_music_preview_url?: string
+          p_music_title?: string
+          p_music_track_id?: number
+          p_link?: string
+          p_venue_address?: string
+          p_venue_category?: string
+          p_venue_latitude?: number
+          p_venue_longitude?: number
+          p_venue_name?: string
           p_image_path: string
           p_latitude?: number
           p_location?: string
@@ -752,6 +807,17 @@ export type Database = {
           location: string | null
           longitude: number | null
           luminance: number | null
+          music_artist: string | null
+          music_artwork_url: string | null
+          music_preview_url: string | null
+          music_title: string | null
+          music_track_id: number | null
+          link: string | null
+          venue_address: string | null
+          venue_category: string | null
+          venue_latitude: number | null
+          venue_longitude: number | null
+          venue_name: string | null
           position: number
           rating: number | null
           selfie_path: string | null

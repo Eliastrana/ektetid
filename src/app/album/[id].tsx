@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -20,15 +19,16 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { ActionCluster, CLUSTER_GAP } from '@/components/action-cluster';
-import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth-provider';
 import { CommentSheet } from '@/components/comment-sheet';
 import { NativePostButton } from '@/components/native-post-button';
 import { PeopleSheet } from '@/components/people-sheet';
 import { ReportSheet } from '@/components/report-sheet';
-import { GlassPill } from '@/components/glass-pill';
+import { LikeBurst } from '@/components/like-burst';
 import { LikeButton } from '@/components/like-button';
-import { imageSpecs, PostTile } from '@/components/post-tile';
+import { PostTile } from '@/components/post-tile';
+import { MusicIndicator } from '@/components/music-indicator';
+import { PostMusic } from '@/components/post-music';
 import { PostVideo } from '@/components/post-video';
 import { Scrim } from '@/components/scrim';
 import { Screen } from '@/components/screen';
@@ -146,6 +146,11 @@ export default function AlbumScreen() {
   // translateY, so it has to exist before that hook runs.
   /** Drives the burst that confirms a double-tap heart. */
   const burst = useSharedValue(0);
+  /** Where that tap was, so the heart lands under the finger. */
+  const burstX = useSharedValue(0);
+  const burstY = useSharedValue(0);
+  /** Rolled per tap, so the ring of hearts is never twice in the same place. */
+  const burstSpin = useSharedValue(0);
   /**
    * Show the whole frame instead of filling the screen.
    *
@@ -154,8 +159,37 @@ export default function AlbumScreen() {
    * reveals what the crop hid.
    */
   const [uncropped, setUncropped] = useState(false);
+  /**
+   * Whether the selfie has taken the photo's place on screen.
+   *
+   * Owned here because this is what draws the full-screen image; the tile only
+   * needs to know which of the two to put in its inset. Per post, and reset
+   * with everything else on the way to the next one.
+   */
+  const [swapped, setSwapped] = useState(false);
+
   /** Video sound, off until asked for. Reset whenever the post changes. */
   const [muted, setMuted] = useState(true);
+
+  /**
+   * Whether the reader has asked for sound while in this album.
+   *
+   * Every post still starts silent by default — the album advances on a tap,
+   * and sound arriving unasked is the fastest way to make someone close an app.
+   * But asking once is asking: having unmuted a song, being made to unmute the
+   * next one, and the one after that, is the app forgetting something it was
+   * plainly told.
+   *
+   * A ref rather than state: nothing renders from it, and it is read inside the
+   * navigation callbacks, where a stale captured value would silently undo it.
+   */
+  const soundWanted = useRef(false);
+
+  /** The single way the mute state changes, so the preference cannot drift. */
+  const changeMuted = useCallback((next: boolean) => {
+    soundWanted.current = !next;
+    setMuted(next);
+  }, []);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -286,7 +320,6 @@ export default function AlbumScreen() {
 
   const posts = useMemo(() => album?.posts ?? [], [album]);
   const current = posts[index];
-  const currentSpecs = imageSpecs(current?.exif);
 
   /**
    * Whether this viewer may see who has looked at this photo.
@@ -296,6 +329,16 @@ export default function AlbumScreen() {
    * there is any way into the sheet on a photo nobody has hearted.
    */
   const canSeeViews = !!session && !!current && current.author_id === session.user.id && isPro;
+
+  /**
+   * The snippet attached to this photo, if there is one and nothing else is
+   * making sound.
+   *
+   * A clip carries its own audio, so music is never offered on one and never
+   * played over one — two sources on a single post means silencing one of them
+   * on a rule nobody asked for.
+   */
+  const music = current && !current.videoUrl ? current.music_preview_url : null;
 
   useEffect(() => {
     if (!session) return;
@@ -404,6 +447,17 @@ export default function AlbumScreen() {
     }
     // A new album should not inherit the drag that ended the last one.
     translateX.value = 0;
+    /*
+     * Nor its sound.
+     *
+     * The preference is per album, and the hand-over to the next one may reuse
+     * this screen rather than remounting it — so without clearing it here,
+     * unmuting one song would keep unmuting every album read after it.
+     */
+    soundWanted.current = false;
+    setMuted(true);
+    // Nor the swap: the next album's first photo should be its photo.
+    setSwapped(false);
   }, [handover, id, params.from, translateX, width]);
 
   // Preload the neighbours so advancing feels instant.
@@ -603,9 +657,10 @@ export default function AlbumScreen() {
       zoomScale.value = withTiming(1, { duration: 160 });
       zoomX.value = withTiming(0, { duration: 160 });
       zoomY.value = withTiming(0, { duration: 160 });
-      // Each post starts on its own terms: silent, and framed as shot.
-      setMuted(true);
+      // Framed as shot, and silent unless sound was already asked for here.
+      setMuted(!soundWanted.current);
       setUncropped(false);
+      setSwapped(false);
       setIndex(next);
       revealChrome();
     },
@@ -673,34 +728,36 @@ export default function AlbumScreen() {
   }, [genie, origin, router, translateY]);
 
   /** Cancelled drag: re-open, matching the curve the button uses. */
-  const likeByDoubleTap = useCallback(() => {
-    revealChrome();
-    burst.value = 0;
-    burst.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.cubic) });
+  const likeByDoubleTap = useCallback(
+    (x: number, y: number) => {
+      revealChrome();
+      burstX.value = x;
+      burstY.value = y;
+      burstSpin.value = Math.random() * Math.PI * 2;
+      burst.value = 0;
+      /*
+       * Linear, and longer than it was.
+       *
+       * The curve now lives in the burst itself, which interpolates every part
+       * of the animation off this one clock. Easing here would bend all of them
+       * at once and the overshoot would land in the wrong place.
+       */
+      burst.value = withTiming(1, { duration: 780, easing: Easing.linear });
 
-    if (likes.likedByMe) {
-      // Already liked: confirm the gesture was seen, but change nothing.
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      return;
-    }
-    void onToggleLike();
-  }, [burst, likes.likedByMe, onToggleLike, revealChrome]);
+      if (likes.likedByMe) {
+        // Already liked: confirm the gesture was seen, but change nothing.
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        return;
+      }
+      void onToggleLike();
+    },
+    [burst, burstSpin, burstX, burstY, likes.likedByMe, onToggleLike, revealChrome]
+  );
 
   const setUncroppedWithFeedback = useCallback((next: boolean) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
     setUncropped(next);
   }, []);
-
-  const burstStyle = useAnimatedStyle(() => {
-    const t = burst.value;
-    if (t === 0 || t === 1) return { opacity: 0, transform: [{ scale: 0 }] };
-    return {
-      // Grows quickly, holds, then fades — the shape of a stamp rather than a
-      // fade in and out, which would read as something loading.
-      opacity: t < 0.15 ? t / 0.15 : t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1,
-      transform: [{ scale: 0.6 + Math.min(t / 0.3, 1) * 0.55 }],
-    };
-  });
 
   const springBackY = useCallback(() => {
     const back = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
@@ -819,8 +876,10 @@ export default function AlbumScreen() {
       Gesture.Tap()
         .numberOfTaps(2)
         .maxDuration(300)
-        .onEnd(() => {
-          runOnJS(likeByDoubleTap)();
+        .onEnd((event) => {
+          // The coordinates were being discarded, which is why the heart always
+          // arrived in the middle of a photograph nobody had tapped.
+          runOnJS(likeByDoubleTap)(event.x, event.y);
         }),
     [likeByDoubleTap]
   );
@@ -956,6 +1015,19 @@ export default function AlbumScreen() {
     <>
       <GestureDetector gesture={gesture}>
         <Animated.View className="flex-1" style={photoStyle}>
+          {/* Keyed like the video player below, so moving between posts builds a
+              new one rather than reusing a player still pointed at the last
+              track. Draws nothing; the chrome carries the controls. */}
+          {music ? (
+            <PostMusic
+              key={`${current?.id}-music`}
+              uri={music}
+              active
+              muted={muted}
+              onUnmute={() => changeMuted(false)}
+            />
+          ) : null}
+
           {current?.videoUrl ? (
             /* Keyed on the post so moving to the next clip builds a new player
                rather than reusing one still pointed at the previous file. */
@@ -964,14 +1036,21 @@ export default function AlbumScreen() {
               uri={current.videoUrl}
               active
               muted={muted}
-              onUnmute={() => setMuted(false)}
+              onUnmute={() => changeMuted(false)}
               uncropped={uncropped}
             />
           ) : current?.imageUrl ? (
             <Image
-              source={{ uri: current.imageUrl }}
-              placeholder={current.blurhash ? { blurhash: current.blurhash } : undefined}
-              recyclingKey={current.id}
+              source={{ uri: swapped && current.selfieUrl ? current.selfieUrl : current.imageUrl }}
+              // The blurhash describes the photo, so it is only a placeholder
+              // for the photo — over the selfie it would be the wrong colours.
+              placeholder={
+                !swapped && current.blurhash ? { blurhash: current.blurhash } : undefined
+              }
+              // Swapping is a different image in the same slot, so it counts as
+              // a new one for recycling: without this the view keeps the old
+              // bitmap until the new one decodes.
+              recyclingKey={`${current.id}-${swapped ? 'selfie' : 'photo'}`}
               transition={180}
               // contain shows the whole frame, letterboxed against the canvas;
               // cover fills the screen and crops whatever does not fit.
@@ -987,6 +1066,21 @@ export default function AlbumScreen() {
       </GestureDetector>
 
       <Scrim height={0.45} />
+
+      {/*
+        The heart a double-tap leaves behind.
+
+        A sibling of the photo, not a child of the Screen below it. Screen
+        applies the safe-area insets as padding, and `absolute inset-0` resolves
+        against a padding box — so inside it every heart landed some forty-seven
+        points below the finger that asked for it, and the bottom of the burst's
+        space hung off the screen. The gesture reports coordinates in the
+        photo's space, so the burst has to live in that space too.
+
+        Above the photo and the scrim, below the chrome, and taking no touches
+        at any point, so it cannot swallow the next tap while it fades.
+      */}
+      <LikeBurst progress={burst} x={burstX} y={burstY} spin={burstSpin} />
 
       <Screen className="absolute inset-0" pointerEvents="box-none">
         <Animated.View
@@ -1032,58 +1126,42 @@ export default function AlbumScreen() {
 
           </View>
 
-          {/* Matches the gap above it: the sound button is the same glass circle
-              as the row's controls, and at mt-2 the two rows read as touching. */}
-          <View className="mt-3 flex-row items-center gap-2">
-            <View className="min-w-0 flex-1 flex-row items-center gap-2">
-              {expanded && currentSpecs.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  className="flex-1"
-                  contentContainerStyle={{ gap: 7 }}>
-                  {currentSpecs.map((spec) => (
-                    <GlassPill key={spec}>{spec}</GlassPill>
-                  ))}
-                </ScrollView>
-              ) : null}
+          {/*
+            Music gets its own control: the cover art is a remote image and a
+            native button's label cannot hold one. A clip keeps the plain
+            speaker, since there is no artwork to show for it. The row is left
+            out entirely when a post is silent, rather than left empty — an
+            empty row is still a gap on the photograph.
+          */}
+          {music && current ? (
+            <View className="mt-3 flex-row justify-end">
+              <MusicIndicator
+                artworkUrl={current.music_artwork_url}
+                title={current.music_title ?? ''}
+                artist={current.music_artist ?? ''}
+                muted={muted}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  changeMuted(!muted);
+                }}
+              />
             </View>
-
-            <View className="flex-row items-center gap-1">
-              {current?.videoUrl ? (
-                <NativePostButton
-                  label={muted ? 'Slå på lyd' : 'Slå av lyd'}
-                  systemImage={muted ? 'speaker.slash.fill' : 'speaker.wave.2.fill'}
-                  appearance="glass"
-                  onPress={() => {
-                    void Haptics.selectionAsync();
-                    setMuted((value) => !value);
-                  }}
-                />
-              ) : null}
+          ) : current?.videoUrl ? (
+            <View className="mt-3 flex-row justify-end">
+              <NativePostButton
+                label={muted ? 'Slå på lyd' : 'Slå av lyd'}
+                systemImage={muted ? 'speaker.slash.fill' : 'speaker.wave.2.fill'}
+                appearance="glass"
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  changeMuted(!muted);
+                }}
+              />
             </View>
-          </View>
+          ) : null}
         </Animated.View>
 
         <View className="flex-1" pointerEvents="none" />
-
-        {/*
-          The heart a double-tap leaves behind.
-
-          Sits above the photo but below the chrome, and takes no touches, so
-          it cannot swallow the next tap while it is fading.
-        */}
-        <Animated.View
-          style={burstStyle}
-          pointerEvents="none"
-          className="absolute inset-0 items-center justify-center">
-          <Icon
-            name="heart.fill"
-            size={120}
-            tintColor="#ffffff"
-            fallback={<Text className="text-8xl">❤️</Text>}
-          />
-        </Animated.View>
 
         {bounce ? (
           <View className="absolute left-6 top-1/2" pointerEvents="none">
@@ -1202,6 +1280,21 @@ export default function AlbumScreen() {
               post={current}
               showAuthor={album.isShared}
               hideRating={actionsOpen}
+              swapped={swapped}
+              /*
+               * Not offered on a video post. The clip is the thing playing, and
+               * putting it in a 132pt inset while a still selfie fills the
+               * screen would stop it being a video post at all.
+               */
+              onSwap={
+                current.selfieUrl && !current.videoUrl
+                  ? () => {
+                      void Haptics.selectionAsync();
+                      setSwapped((value) => !value);
+                      revealChrome();
+                    }
+                  : undefined
+              }
               expanded={expanded}
               onToggle={() => {
                 void Haptics.selectionAsync();
@@ -1246,10 +1339,11 @@ export default function AlbumScreen() {
             setShowGrid(false);
             if (position === index) return;
             setExpanded(false);
-            // Each post starts on its own terms, exactly as when tapping
-            // through: silent, and framed as shot.
-            setMuted(true);
+            // Exactly as when tapping through: framed as shot, and silent
+            // unless sound was already asked for in this album.
+            setMuted(!soundWanted.current);
             setUncropped(false);
+            setSwapped(false);
             setIndex(position);
             revealChrome();
           }}

@@ -1,6 +1,8 @@
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Image } from 'expo-image';
+import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import Animated, {
   type SharedValue,
   Easing,
@@ -9,8 +11,15 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import type { SFSymbol } from 'sf-symbols-typescript';
+
 import type { AlbumPost } from '@/lib/album';
 import { Dice } from '@/components/dice';
+import { GlassPill } from '@/components/glass-pill';
+import { Icon } from '@/components/icon';
+import { NativePostButton } from '@/components/native-post-button';
+import { linkLabel } from '@/lib/link';
+import { fromPostVenue, venueMapsUrl } from '@/lib/venue';
 
 type Props = {
   post: AlbumPost;
@@ -29,6 +38,19 @@ type Props = {
    * button with pips showing through it is worse than no pips at all.
    */
   hideRating?: boolean;
+  /**
+   * Whether the selfie is currently the full-screen photo.
+   *
+   * Owned by the album, which draws that photo; this only decides which of the
+   * two images belongs in the inset.
+   */
+  swapped?: boolean;
+  /**
+   * Trade the inset for the photo behind it. Absent where swapping makes no
+   * sense — a clip cannot become an inset, and the vertical stream draws its
+   * own photo without asking this component.
+   */
+  onSwap?: () => void;
 };
 
 const MONTHS = [
@@ -47,6 +69,28 @@ const SELFIE_COLLAPSED = { width: 60, height: 80 };
  * their bottom edges 4pt out of line with each other.
  */
 const CHROME_GAP = 12;
+
+/**
+ * The swap control's size, and how it is arrived at.
+ *
+ * Much smaller than the album's chrome on purpose: those sit on the photograph
+ * and are the screen's controls, while this one sits inside a 132pt inset and
+ * is about the inset alone. At chrome size it took a third of the selfie's
+ * width.
+ *
+ * Two levers, because the obvious one runs out. The glyph box sets the disc —
+ * SwiftUI draws the glass around the label — but the control's own padding is
+ * roughly 25pt of it, so no box brings the disc under about thirty, and a
+ * smaller box only crowds a full-size glyph against the edge. Scaling takes the
+ * finished control down as one piece, glyph included.
+ *
+ * The frame is the scaled result rather than the unscaled one, since
+ * scaleEffect does not change the room a view occupies: at 38 the disc would
+ * float in the middle of a box half again its size.
+ */
+const SWAP_GLYPH_BOX = 12;
+const SWAP_SCALE = 0.72;
+const SWAP_SIZE = 27;
 const SELFIE_EXPANDED = { width: 132, height: 176 };
 const DESCRIPTION_PREVIEW_LINES = 4;
 
@@ -167,6 +211,8 @@ export function PostTile({
   onToggle,
   showAuthor = false,
   hideRating = false,
+  swapped = false,
+  onSwap,
 }: Props) {
   const specs = imageSpecs(post.exif);
   const hasDetail = !!post.selfieUrl || specs.length > 0;
@@ -253,6 +299,15 @@ export function PostTile({
             </View>
           </Pressable>
 
+          {/*
+            Outside the Pressable above, not inside it.
+
+            That one toggles the tile's detail on tap, and a button nested in it
+            would fire both — opening Maps and collapsing the tile from one
+            press.
+          */}
+          <PostActions post={post} />
+
           {post.description ? (
             <View className="pt-3">
               {/* Measure the unconstrained copy so "Les mer" only appears
@@ -294,6 +349,30 @@ export function PostTile({
             </View>
           ) : null}
 
+          {/*
+            The camera's own numbers, under the words rather than over the
+            photograph.
+            
+            They lived in the album's chrome, which put them among the controls
+            — a row of readings competing with the buttons for the same line,
+            and for attention they do not want. Here they are the last thing on
+            the tile, after the title, the caption and the buttons, which is the
+            order someone reads in and the order these matter in.
+
+            Wrapped rather than scrolled sideways: there are only ever a few,
+            and a Collapsible has to measure its content's height, which a
+            horizontal scroller does not honestly report.
+          */}
+          {specs.length > 0 ? (
+            <Collapsible progress={progress}>
+              <View className="flex-row flex-wrap items-center gap-2 pt-3">
+                {specs.map((spec) => (
+                  <GlassPill key={spec}>{spec}</GlassPill>
+                ))}
+              </View>
+            </Collapsible>
+          ) : null}
+
           {hasDetail ? (
             <Pressable
               accessibilityRole="button"
@@ -313,44 +392,178 @@ export function PostTile({
            * Fixed width, so the text column beside it keeps the same width at
            * every point in the animation. Only the height moves, and that
            * changes the row's height without touching how the text wraps.
+           *
+           * The wrapper exists so the swap control can sit over the inset
+           * without being inside the Pressable that collapses it. Nested
+           * Pressables are fine — React Native hands the touch to the
+           * innermost — but a SwiftUI host is not a React Native responder,
+           * and which of the two wins is not something to find out on a
+           * device. As a sibling the question does not arise.
            */
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? 'Gjør selfien mindre' : 'Utvid selfien'}
-            onPress={onToggle}>
-            <Animated.View
-              style={[
-                selfieBoxStyle,
-                { width: SELFIE_EXPANDED.width, overflow: 'hidden' },
-              ]}>
+          <View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? 'Gjør selfien mindre' : 'Utvid selfien'}
+              onPress={onToggle}>
               <Animated.View
                 style={[
-                  selfieImageStyle,
-                  {
-                    position: 'absolute',
-                    right: 0,
-                    bottom: 0,
-                    width: SELFIE_EXPANDED.width,
-                    height: SELFIE_EXPANDED.height,
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    // Anchored to the corner it is pinned to, so shrinking pulls
-                    // it into the bottom right rather than towards its centre.
-                    transformOrigin: ['100%', '100%', 0],
-                  },
+                  selfieBoxStyle,
+                  { width: SELFIE_EXPANDED.width, overflow: 'hidden' },
                 ]}>
-                <Image
-                  source={{ uri: post.selfieUrl }}
-                  contentFit="cover"
-                  transition={150}
-                  style={{ width: '100%', height: '100%' }}
-                />
+                <Animated.View
+                  style={[
+                    selfieImageStyle,
+                    {
+                      position: 'absolute',
+                      right: 0,
+                      bottom: 0,
+                      width: SELFIE_EXPANDED.width,
+                      height: SELFIE_EXPANDED.height,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      // Anchored to the corner it is pinned to, so shrinking pulls
+                      // it into the bottom right rather than towards its centre.
+                      transformOrigin: ['100%', '100%', 0],
+                    },
+                  ]}>
+                  <Image
+                    // Whichever one the album is not showing full screen.
+                    source={{ uri: swapped ? (post.imageUrl ?? '') : post.selfieUrl }}
+                    contentFit="cover"
+                    transition={150}
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                </Animated.View>
               </Animated.View>
-            </Animated.View>
-          </Pressable>
+            </Pressable>
+
+            {/*
+              Offered only while the selfie is open.
+
+              Collapsed it is a thumbnail the size of a stamp, and a control on
+              top of it would cover most of the face it is meant to show.
+              Expanded there is room, and expanding is also when someone is
+              looking closely enough to want the other way round.
+
+              The same native glass circle as the album's controls, but smaller:
+              this one belongs to the inset it sits on, not to the screen.
+            */}
+            {expanded && onSwap ? (
+              <View style={{ position: 'absolute', left: 6, top: 6 }}>
+                <NativePostButton
+                  label={swapped ? 'Vis bildet i stort igjen' : 'Bytt selfien og bildet'}
+                  systemImage="arrow.triangle.2.circlepath"
+                  appearance="glass"
+                  size={SWAP_SIZE}
+                  glyphBox={SWAP_GLYPH_BOX}
+                  scale={SWAP_SCALE}
+                  onPress={onSwap}
+                />
+              </View>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </View>
+  );
+}
+
+/**
+ * The venue and the link, when a post has them.
+ *
+ * Both are buttons, and look like it. An author who attaches either wants it
+ * followed, so neither is context to be noticed — they are the things on the
+ * tile asking to be pressed. Nothing renders when a post has neither, which is
+ * most of them.
+ *
+ * They go to different places on purpose. A venue is a point on a map, so it
+ * hands off to Maps, which knows what to do with it; a link is a web page, so
+ * it opens in the in-app browser and the reader stays in the album.
+ */
+function PostActions({ post }: { post: AlbumPost }) {
+  const venue = fromPostVenue(post);
+  const link = post.link;
+
+  if (!venue && !link) return null;
+
+  return (
+    <View className="gap-2 pt-2">
+      {venue ? (
+        <PostAction
+          icon="fork.knife"
+          glyph="◍"
+          label={venue.name}
+          spoken={`Åpne ${venue.name} i Kart`}
+          onPress={() => void Linking.openURL(venueMapsUrl(venue))}
+        />
+      ) : null}
+
+      {link ? (
+        <PostAction
+          icon="link"
+          glyph="🔗"
+          label={linkLabel(link)}
+          spoken={`Åpne lenken ${linkLabel(link)}`}
+          onPress={() => void openBrowserAsync(link)}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * One of those buttons.
+ *
+ * Its own component so the two cannot drift apart: they sit directly above one
+ * another on the same tile, where a point of padding between them would be the
+ * most visible thing on the photograph.
+ *
+ * The same glass the album chrome and the music indicator are made of, with a
+ * flat fill where that material does not exist — the fallback is conditional
+ * because applied over real glass it is a grey film on top of the blur.
+ */
+function PostAction({
+  icon,
+  glyph,
+  label,
+  spoken,
+  onPress,
+}: {
+  icon: SFSymbol;
+  /** Stand-in where the symbol has no mapping, so the button is never blank. */
+  glyph: string;
+  label: string;
+  spoken: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={spoken}
+      onPress={onPress}
+      className="self-start active:opacity-70">
+      <GlassView
+        glassEffectStyle="regular"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          paddingHorizontal: 16,
+          paddingVertical: 11,
+          borderRadius: 999,
+          backgroundColor: isLiquidGlassAvailable() ? undefined : 'rgba(255,255,255,0.13)',
+        }}>
+        <Icon
+          name={icon}
+          size={14}
+          tintColor="#ffffff"
+          fallback={<Text className="text-sm text-ink">{glyph}</Text>}
+        />
+        <Text numberOfLines={1} className="max-w-[210px] text-sm font-semibold text-ink">
+          {label}
+        </Text>
+      </GlassView>
+    </Pressable>
   );
 }
 

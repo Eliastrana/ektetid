@@ -12,6 +12,7 @@ import {
   imageScale,
   labelStyle,
   padding,
+  scaleEffect,
   tint,
 } from '@expo/ui/swift-ui/modifiers';
 import type { SFSymbol } from 'sf-symbols-typescript';
@@ -51,6 +52,21 @@ export type NativePostButtonProps = {
    * disc matches the buttons beside it.
    */
   glyphBox?: number;
+  /**
+   * Shrink the whole control, glyph and glass together.
+   *
+   * The lever below the glyph box's floor. A glass disc is drawn around the
+   * label plus the control's own padding, and that padding is roughly 25pt at
+   * this control size — so no box, however small, brings the disc under about
+   * thirty, and a smaller box only crowds a full-size glyph against the edge.
+   * Scaling takes the finished control down as one piece, which is what "the
+   * same button, smaller" actually means.
+   *
+   * `scaleEffect` does not change the space the control occupies, so `size`
+   * should be set to the scaled result: the disc then fills its frame instead
+   * of floating inside a larger one.
+   */
+  scale?: number;
   contentAlignment?: 'center' | 'leading' | 'trailing';
   contentInset?: number;
 };
@@ -67,6 +83,7 @@ export function NativePostButton({
   foregroundColor,
   size = 44,
   glyphBox,
+  scale,
   stackValue = false,
   contentAlignment = 'center',
   contentInset = 0,
@@ -194,6 +211,9 @@ export function NativePostButton({
             : withValue
               ? frame({ height: size })
               : frame({ width: size, height: size, alignment: contentAlignment }),
+          // After the frame, so it scales the laid-out control rather than
+          // being scaled by it.
+          ...(scale !== undefined ? [scaleEffect(scale)] : []),
           tint(tintColor),
           ...(foregroundColor ? [foregroundStyle(foregroundColor)] : []),
           accessibilityLabel(label),

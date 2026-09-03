@@ -1,5 +1,12 @@
 import { useEffect } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -41,12 +48,22 @@ export function BottomSheet({
   backdrop = 'bg-black/50',
   avoidKeyboard = false,
   keyboardVerticalOffset = 0,
+  surfaceStyle,
 }: {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
   /** Height and any other sizing for the sheet surface. */
   className?: string;
+  /**
+   * Sizing that has to be computed rather than named in a class.
+   *
+   * For a sheet whose height depends on the keyboard: `behavior: 'padding'`
+   * lifts the surface by the keyboard's height, so a surface taller than the
+   * space left over is pushed off the top of the screen. A sheet in that
+   * position measures the room it has and passes a height here.
+   */
+  surfaceStyle?: StyleProp<ViewStyle>;
   backdrop?: string;
   /** Lift the sheet clear of the keyboard, for sheets that take input. */
   avoidKeyboard?: boolean;
@@ -116,10 +133,12 @@ export function BottomSheet({
       className="rounded-t-3xl bg-canvas"
       behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}>
-      <View className={surfaceClassName}>{sheetContents}</View>
+      <View className={surfaceClassName} style={surfaceStyle}>
+        {sheetContents}
+      </View>
     </AnimatedKeyboardAvoidingView>
   ) : (
-    <Animated.View style={sheetStyle} className={surfaceClassName}>
+    <Animated.View style={[sheetStyle, surfaceStyle]} className={surfaceClassName}>
       {sheetContents}
     </Animated.View>
   );

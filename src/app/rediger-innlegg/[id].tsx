@@ -14,9 +14,15 @@ import {
 } from 'react-native';
 
 import { ErrorNotice } from '@/components/error-notice';
+import type { Venue } from '@/../modules/venue-search';
+import { LinkField } from '@/components/link-field';
+import { MusicField } from '@/components/music-field';
+import { VenueField } from '@/components/venue-field';
 import { NativePostButton } from '@/components/native-post-button';
 import { SkeletonBox } from '@/components/skeleton';
 import { errorMessage } from '@/lib/errors';
+import { fromPostMusic, NO_MUSIC, toPostMusic, type MusicTrack } from '@/lib/music';
+import { fromPostVenue, NO_VENUE, toPostVenue } from '@/lib/venue';
 import { fetchEditablePost, updatePostDetails } from '@/lib/post-edit';
 
 export default function EditPostScreen() {
@@ -26,6 +32,9 @@ export default function EditPostScreen() {
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [ratingEnabled, setRatingEnabled] = useState(false);
+  const [music, setMusic] = useState<MusicTrack | null>(null);
+  const [venue, setVenue] = useState<Venue | null>(null);
+  const [link, setLink] = useState('');
   const [rating, setRating] = useState(4);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +51,9 @@ export default function EditPostScreen() {
         setLocation(post.location ?? '');
         setRatingEnabled(post.rating !== null);
         setRating(post.rating ?? 4);
+        setMusic(fromPostMusic(post));
+        setVenue(fromPostVenue(post));
+        setLink(post.link ?? '');
       })
       .catch((caught) => {
         if (active) setError(errorMessage(caught, 'Klarte ikke å åpne innlegget.'));
@@ -64,6 +76,11 @@ export default function EditPostScreen() {
         description,
         location,
         rating: ratingEnabled ? rating : null,
+        // NO_MUSIC rather than an absent key, so removing a track actually
+        // clears the columns instead of leaving the old one in place.
+        music: music ? toPostMusic(music) : NO_MUSIC,
+        venue: venue ? toPostVenue(venue) : NO_VENUE,
+        link,
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -195,6 +212,21 @@ export default function EditPostScreen() {
             </View>
           ) : null}
         </View>
+
+        <MusicField track={music} onChange={setMusic} />
+
+        {/*
+          The venue keeps its own coordinates, so it can be changed here without
+          the photo's. Nothing renders off Apple platforms, or on a post that
+          never had one — there is nowhere to search from.
+        */}
+        <VenueField
+          venue={venue}
+          coordinates={venue ? { latitude: venue.latitude, longitude: venue.longitude } : null}
+          onChange={setVenue}
+        />
+
+        <LinkField value={link} onChange={setLink} />
 
         {error ? <ErrorNotice message={error} /> : null}
       </ScrollView>

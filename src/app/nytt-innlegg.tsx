@@ -26,6 +26,11 @@ import { notePublishedPost } from '@/lib/review';
 import { exifCoordinates, type Coordinates } from '@/lib/geo';
 import { archivePublishedCapture } from '@/lib/local-archive';
 import { clearPendingCapture, getPendingCapture } from '@/lib/pending-capture';
+import type { Venue } from '@/../modules/venue-search';
+import { LinkField } from '@/components/link-field';
+import { MusicField } from '@/components/music-field';
+import { VenueField } from '@/components/venue-field';
+import type { MusicTrack } from '@/lib/music';
 import {
   createAlbum,
   listWritableAlbums,
@@ -54,6 +59,17 @@ export default function NewPostScreen() {
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [ratingEnabled, setRatingEnabled] = useState(false);
+  /**
+   * The snippet to play when the photo is opened.
+   *
+   * Offered on stills only. A clip already carries its own sound, and two
+   * sources over one post means one of them has to be silenced arbitrarily.
+   */
+  const [music, setMusic] = useState<MusicTrack | null>(null);
+  /** The venue this was taken in, from Apple's nearby places. Apple-only. */
+  const [venue, setVenue] = useState<Venue | null>(null);
+  /** Raw as typed; publishPost normalises it and drops anything unusable. */
+  const [link, setLink] = useState('');
   const [rating, setRating] = useState(4);
   const [albums, setAlbums] = useState<WritableAlbum[]>([]);
   const [albumId, setAlbumId] = useState<string | null>(null);
@@ -128,6 +144,9 @@ export default function NewPostScreen() {
           takenAt: new Date(),
           coordinates,
           rating: ratingEnabled ? rating : null,
+          music: capture.videoUri ? null : music,
+          venue,
+          link,
         },
         setProgress
       );
@@ -159,10 +178,13 @@ export default function NewPostScreen() {
     capture,
     coordinates,
     description,
+    link,
     location,
+    music,
     newAlbumTitle,
     progress,
     rating,
+    venue,
     ratingEnabled,
     router,
     selfieUri,
@@ -270,6 +292,21 @@ export default function NewPostScreen() {
                   })}
                 </View>
               ) : null}
+            </View>
+
+            {capture.videoUri ? null : (
+              <View className="mt-3">
+                <MusicField track={music} onChange={setMusic} />
+              </View>
+            )}
+
+            {/* Renders nothing without coordinates, or off Apple platforms. */}
+            <View className="mt-3">
+              <VenueField venue={venue} coordinates={coordinates} onChange={setVenue} />
+            </View>
+
+            <View className="mt-3">
+              <LinkField value={link} onChange={setLink} />
             </View>
 
             <Text className="mb-2 mt-6 text-sm text-muted">Album</Text>

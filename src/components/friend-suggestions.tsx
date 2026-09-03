@@ -84,7 +84,7 @@ export function FriendSuggestions({ limit = 12 }: { limit?: number }) {
         renderItem={({ item }) => {
           const already = sent.has(item.id);
           return (
-            <View className="w-36 items-center gap-2 rounded-tile border border-ink bg-glass p-3">
+            <View className="w-36 items-center gap-2 rounded-tile bg-glass p-3">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Se profilen til ${item.username}`}

@@ -1,7 +1,10 @@
 import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
 
+import type { Venue } from '@/../modules/venue-search';
 import type { Coordinates } from '@/lib/geo';
+import { normaliseLink } from '@/lib/link';
+import type { MusicTrack } from '@/lib/music';
 import { processImage, processSelfie } from '@/lib/image-pipeline';
 import type { PendingCapture } from '@/lib/pending-capture';
 import { notify } from '@/lib/notifications';
@@ -20,6 +23,12 @@ export type PublishInput = {
   coordinates: Coordinates | null;
   /** Optional dice rating chosen by the author. */
   rating: number | null;
+  /** A thirty-second snippet to play when the photo is opened, if chosen. */
+  music: MusicTrack | null;
+  /** The place it was taken, picked from Apple's nearby venues. */
+  venue: Venue | null;
+  /** Raw text as typed; normalised here, and dropped if it is not a web URL. */
+  link: string;
 };
 
 export type PublishProgress = 'processing' | 'uploading' | 'saving' | 'archiving';
@@ -166,6 +175,21 @@ export async function publishPost(
     // Kept for backwards-compatible RPC/database shape. New posts are always
     // stored unfiltered now that the filter picker has been removed.
     p_filter_name: 'original',
+    // Sent as five separate arguments rather than a composite, because the RPC
+    // mirrors the columns and Postgres has no row type to hand it here.
+    p_music_track_id: input.music?.trackId ?? undefined,
+    p_music_title: input.music?.title ?? undefined,
+    p_music_artist: input.music?.artist ?? undefined,
+    p_music_artwork_url: input.music?.artworkUrl ?? undefined,
+    p_music_preview_url: input.music?.previewUrl ?? undefined,
+    p_venue_name: input.venue?.name ?? undefined,
+    p_venue_category: input.venue?.category ?? undefined,
+    p_venue_address: input.venue?.address || undefined,
+    p_venue_latitude: input.venue?.latitude ?? undefined,
+    p_venue_longitude: input.venue?.longitude ?? undefined,
+    // Normalised at the boundary rather than in the form, so a link only ever
+    // reaches the database in the one shape the column's constraint accepts.
+    p_link: normaliseLink(input.link) ?? undefined,
   });
 
   if (error) {

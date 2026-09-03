@@ -337,9 +337,22 @@ export default function CameraScreen() {
         // Passing a back-camera lens while the front is active would ask for a
         // device that does not exist on this side.
         selectedLens={facing === 'back' ? (backLens ?? undefined) : undefined}
-        // Mirrored, so the selfie is saved the way you saw yourself compose it.
-        // The takePictureAsync option of the same name is deprecated in SDK 57.
-        mirror
+        /*
+         * Only while the front camera is live.
+         *
+         * The selfie should be saved the way you watched yourself compose it,
+         * which is what this is for. Set unconditionally it also mirrored the
+         * video: expo-camera gates mirroring on the camera position for stills
+         * (`presetCamera == .front && ...` in CameraPhotoCapture.swift) but not
+         * for recordings, where CameraVideoRecording.swift sets
+         * `connection.isVideoMirrored` from the prop alone. So a clip shot on
+         * the back camera came out flipped while a photo did not.
+         *
+         * Safe to drive from state: captureSelfie flips to the front and then
+         * counts down for a second or more before it takes the picture, so the
+         * prop has long since reached native by then.
+         */
+        mirror={facing === 'front'}
         onAvailableLensesChanged={({ lenses }) => {
           setAvailableLenses(lenses);
           // Settle on the plain wide lens once the names are known, so the

@@ -20,6 +20,14 @@ export type NativePostButtonProps = {
    * right size — applying the correction as well would apply it twice.
    */
   glyphBox?: number;
+  /**
+   * Accepted for parity, and unused.
+   *
+   * On iOS this scales a control whose disc SwiftUI decides. Here the circle is
+   * `size` outright, so the caller has already said how big it should be and
+   * scaling it again would apply the same reduction twice.
+   */
+  scale?: number;
   /** Put the value under the glyph instead of beside it, as on iOS. */
   stackValue?: boolean;
   contentAlignment?: 'center' | 'leading' | 'trailing';
