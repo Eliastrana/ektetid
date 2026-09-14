@@ -256,12 +256,15 @@ Deno.serve(async (request) => {
    * differ between a phone and a browser, so it happens once here and only
    * delivery forks below.
    */
-  const queue = async (recipients: string[], column: string, content: PushContent) => {
-    const permitted = await allowedBy(
+  // `column` is null for a notification the recipient asked for by name — an
+  // album they follow — which no broad preference switch should override.
+  const queue = async (recipients: string[], column: string | null, content: PushContent) => {
+    const unblocked = await withoutBlocked(
       admin,
-      column,
-      await withoutBlocked(admin, user.id, [...new Set(recipients)].filter(Boolean))
+      user.id,
+      [...new Set(recipients)].filter(Boolean)
     );
+    const permitted = column ? await allowedBy(admin, column, unblocked) : unblocked;
 
     for (const token of await tokensFor(admin, permitted)) {
       messages.push({
@@ -361,26 +364,56 @@ Deno.serve(async (request) => {
   }
 
   if (kind === 'post') {
-    const { data: post } = await admin
+    // No `albums(title)` embed. Since 0022 gave albums a `cover_post_id`, posts
+    // and albums are joined by two foreign keys, PostgREST refuses the embed as
+    // ambiguous, and `post` came back null — so every new post answered 404 and
+    // notified nobody, silently, while likes and comments kept working.
+    const { data: post, error: postError } = await admin
       .from('posts')
-      .select('author_id, album_id, albums(title)')
+      .select('author_id, album_id')
       .eq('id', id)
       .maybeSingle();
 
+    if (postError) console.error('notify post lookup failed', postError);
     if (!post) return new Response('Not found', { status: 404 });
     if (post.author_id !== user.id) return new Response('Forbidden', { status: 403 });
 
-    const albumTitle = (post.albums as unknown as { title: string } | null)?.title ?? 'et album';
+    const { data: album } = await admin
+      .from('albums')
+      .select('title')
+      .eq('id', post.album_id)
+      .maybeSingle();
+    const albumTitle = album?.title ?? 'et album';
     const { ownerId, memberIds, friendIds } = await albumAudience(admin, post.album_id, user.id);
     // Include the post as a search parameter. The album route already reads
     // `post` and selects that item after loading, so a notification opens the
     // new photo itself instead of merely resuming somewhere in its album.
     const url = `ektetid:///album/${post.album_id}?post=${encodeURIComponent(id)}`;
 
+    // People who switched alerts on for this album in particular. First, and
+    // with no preference column: asking for one album by name outranks every
+    // broad switch, so muting "Nye øyeblikk" must not silence it. Visibility is
+    // re-checked in SQL at send time — a follower who has since lost access to
+    // the album is not returned.
+    const { data: followerRows } = await admin.rpc('album_alert_recipients', {
+      p_album: post.album_id,
+    });
+    const followers = ((followerRows ?? []) as { user_id: string }[])
+      .map((row) => row.user_id)
+      .filter((who) => who !== user.id);
+    await queue(followers, null, {
+      title: albumTitle,
+      body: `${actorName} la ut et nytt bilde i «${albumTitle}».`,
+      url,
+    });
+
     // Collaborators, including the owner when someone else posted into their
     // album. A different switch and a different sentence: this is an album
     // they are part of, not merely one they can see.
-    const collaborators = [...memberIds, ownerId].filter((who) => who && who !== user.id);
+    const followed = new Set(followers);
+    const collaborators = [...memberIds, ownerId].filter(
+      (who) => who && who !== user.id && !followed.has(who)
+    );
     await queue(collaborators, 'shared_album_posts', {
       title: albumTitle,
       body: `${actorName} la til et bilde i «${albumTitle}».`,
@@ -388,8 +421,8 @@ Deno.serve(async (request) => {
     });
 
     // Everyone else who follows the album's owner. Excluded if they are already
-    // being told as a collaborator — one event, one notification.
-    const alsoTold = new Set(collaborators);
+    // being told as a follower or collaborator — one event, one notification.
+    const alsoTold = new Set([...followers, ...collaborators]);
     await queue(friendIds.filter((who) => !alsoTold.has(who)), 'friend_posts', {
       title: 'Nytt øyeblikk',
       body: `${actorName} la ut et nytt bilde.`,

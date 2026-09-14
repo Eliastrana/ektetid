@@ -147,3 +147,38 @@ export function CountPin({ count }: { count: number }) {
     </PinFrame>
   );
 }
+
+/**
+ * A restaurant, shown as its score out of six.
+ *
+ * Black well and white figures — the inverse of a count — so a rating is never
+ * mistaken for "5 moments here". The small "/6" says what the number is out of
+ * without needing a legend.
+ */
+export function RatingPin({ label }: { label: string }) {
+  return (
+    <PinFrame well="#000000">
+      <Text
+        style={{
+          color: '#ffffff',
+          fontSize: 17,
+          fontWeight: '700',
+          lineHeight: 19,
+          textAlign: 'center',
+          fontVariant: ['tabular-nums'],
+        }}>
+        {label}
+      </Text>
+      <Text
+        style={{
+          color: 'rgba(255, 255, 255, 0.7)',
+          fontSize: 9,
+          fontWeight: '600',
+          lineHeight: 10,
+          textAlign: 'center',
+        }}>
+        /6
+      </Text>
+    </PinFrame>
+  );
+}

@@ -19,17 +19,33 @@ import {
   type MapFilter,
   type MapRegion,
 } from '@/lib/map';
-import { countIconId, PinFactory } from '@/components/pin-factory';
+import { Dice } from '@/components/dice';
+import { countIconId, PinFactory, ratingIconId } from '@/components/pin-factory';
 import type { ImageRef } from 'expo-image';
 import { storageImageSource } from '@/lib/images';
+import { venueCategoryName } from '@/lib/venue';
+import {
+  fetchVenueRatings,
+  formatRating,
+  formatRatingCount,
+  type VenueRating,
+} from '@/lib/venue-ratings';
 
 const FILTERS: { value: MapFilter; label: string }[] = [
   { value: 'all', label: 'Alle' },
   { value: 'mine', label: 'Mine' },
+  { value: 'venues', label: 'Restauranter' },
 ];
+
+/**
+ * Restaurant pins drawn at once. Rating pins share one drawing per score, so
+ * this bounds annotations on screen rather than captures.
+ */
+const MAX_VENUE_PINS = 80;
 
 /** Keep the previous map ready while a fresh query revalidates on focus. */
 const mapCache = new Map<string, LocatedPost[]>();
+const venueCache = new Map<string, VenueRating[]>();
 
 function mapCacheKey(filter: MapFilter, selfId?: string): string {
   return `${selfId ?? 'anonymous'}:${filter}`;
@@ -100,8 +116,11 @@ export default function MapScreen() {
   const selfId = session?.user.id;
   const [filter, setFilter] = useState<MapFilter>('all');
   const [posts, setPosts] = useState<LocatedPost[]>([]);
+  /** Rated restaurants. Only filled while the 'venues' filter is on. */
+  const [venues, setVenues] = useState<VenueRating[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedVenueKey, setSelectedVenueKey] = useState<string | null>(null);
   const [icons, setIcons] = useState<Map<string, ImageRef>>(new Map());
   /** Where the camera actually is, once the user has moved it. */
   const [camera, setCamera] = useState<MapRegion | null>(null);
@@ -119,6 +138,27 @@ export default function MapScreen() {
   const load = useCallback(async () => {
     const token = ++loadToken.current;
     attemptedPaths.current = new Set();
+
+    if (filter === 'venues') {
+      const venueKey = selfId ?? 'anonymous';
+      const cachedVenues = venueCache.get(venueKey);
+      setPosts([]);
+      setVenues(cachedVenues ?? []);
+      setLoading(!cachedVenues);
+      try {
+        const fresh = await fetchVenueRatings();
+        if (token !== loadToken.current) return;
+        venueCache.set(venueKey, fresh);
+        setVenues(fresh);
+      } catch {
+        // As with photos below: keep what is on screen.
+      } finally {
+        if (token === loadToken.current) setLoading(false);
+      }
+      return;
+    }
+
+    setVenues([]);
     const cacheKey = mapCacheKey(filter, selfId);
     const cached = mapCache.get(cacheKey);
 
@@ -171,7 +211,10 @@ export default function MapScreen() {
     }, [load])
   );
 
-  const region = useMemo(() => regionFor(posts), [posts]);
+  const region = useMemo(
+    () => (filter === 'venues' ? regionFor(venues) : regionFor(posts)),
+    [filter, posts, venues]
+  );
 
   /**
    * What the camera is looking at: its live position once moved, otherwise the
@@ -208,6 +251,25 @@ export default function MapScreen() {
   const counts = useMemo(
     () => [...new Set(groups.map((cluster) => cluster.posts.length))],
     [groups]
+  );
+
+  /** Rated restaurants near the camera. Not clustered: each carries its own score. */
+  const shownVenues = useMemo(
+    () =>
+      view && filter === 'venues' ? postsInView(venues, view).slice(0, MAX_VENUE_PINS) : [],
+    [filter, venues, view]
+  );
+
+  /** Distinct scores on screen — every "5,3" pin is the same drawing. */
+  const ratingLabels = useMemo(
+    () => [...new Set(shownVenues.map((venue) => formatRating(venue.average)))],
+    [shownVenues]
+  );
+
+  const selectedVenue = useMemo(
+    () =>
+      selectedVenueKey ? (venues.find((venue) => venue.key === selectedVenueKey) ?? null) : null,
+    [selectedVenueKey, venues]
   );
 
   // Sign thumbnails for what is on screen now. Panning somewhere new fetches
@@ -335,8 +397,21 @@ export default function MapScreen() {
           },
         ];
       }),
+      ...shownVenues.flatMap((venue) => {
+        const icon = icons.get(ratingIconId(formatRating(venue.average)));
+        if (!icon) return [];
+
+        return [
+          {
+            id: `venue:${venue.key}`,
+            coordinates: { latitude: venue.latitude, longitude: venue.longitude },
+            title: venue.name,
+            icon,
+          },
+        ];
+      }),
     ],
-    [groups, icons, singles]
+    [groups, icons, shownVenues, singles]
   );
 
   /**
@@ -372,8 +447,21 @@ export default function MapScreen() {
           },
         ];
       }),
+      ...shownVenues.flatMap((venue) => {
+        if (icons.has(ratingIconId(formatRating(venue.average)))) return [];
+
+        return [
+          {
+            id: `venue:${venue.key}`,
+            coordinates: { latitude: venue.latitude, longitude: venue.longitude },
+            title: `${venue.name} · ${formatRating(venue.average)}`,
+            systemImage: 'fork.knife',
+            tintColor: '#111111',
+          },
+        ];
+      }),
     ],
-    [groups, icons, singles]
+    [groups, icons, shownVenues, singles]
   );
 
   // expo-maps has no map on the simulator and no Apple Maps on Android.
@@ -389,7 +477,7 @@ export default function MapScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <PinFactory posts={singles} counts={counts} onReady={setIcons} />
+      <PinFactory posts={singles} counts={counts} ratings={ratingLabels} onReady={setIcons} />
 
       {region ? (
         <AppleMaps.View
@@ -414,12 +502,20 @@ export default function MapScreen() {
               openCluster(id.slice('cluster:'.length));
               return;
             }
+            if (id?.startsWith('venue:')) {
+              setSelectedVenueKey(id.slice('venue:'.length));
+              return;
+            }
             setSelectedId(id);
           }}
           onAnnotationClick={(annotation) => {
             const id = annotation.id ?? null;
             if (id?.startsWith('cluster:')) {
               openCluster(id.slice('cluster:'.length));
+              return;
+            }
+            if (id?.startsWith('venue:')) {
+              setSelectedVenueKey(id.slice('venue:'.length));
               return;
             }
             setSelectedId(id);
@@ -432,10 +528,16 @@ export default function MapScreen() {
           ) : (
             <>
               <Text className="text-base text-ink">
-                {filter === 'mine' ? 'Ingen av dine øyeblikk her' : 'Ingen øyeblikk på kartet'}
+                {filter === 'venues'
+                  ? 'Ingen vurderte restauranter ennå'
+                  : filter === 'mine'
+                    ? 'Ingen av dine øyeblikk her'
+                    : 'Ingen øyeblikk på kartet'}
               </Text>
               <Text className="text-center text-sm text-muted">
-                Bilder tatt med stedstjenester på dukker opp her.
+                {filter === 'venues'
+                  ? 'Legg til et sted og et terningkast på et innlegg, så får restauranten en score her.'
+                  : 'Bilder tatt med stedstjenester på dukker opp her.'}
               </Text>
             </>
           )}
@@ -451,7 +553,13 @@ export default function MapScreen() {
         <View className="items-start gap-3 px-5 pt-2" pointerEvents="box-none">
           <View pointerEvents="none">
             <Text className="text-3xl text-ink">Kart</Text>
-            {posts.length > 0 ? (
+            {filter === 'venues' ? (
+              venues.length > 0 ? (
+                <Text className="text-sm text-muted">
+                  {venues.length} {venues.length === 1 ? 'restaurant' : 'restauranter'}
+                </Text>
+              ) : null
+            ) : posts.length > 0 ? (
               <Text className="text-sm text-muted">{posts.length} øyeblikk</Text>
             ) : null}
           </View>
@@ -463,6 +571,11 @@ export default function MapScreen() {
               // Clear the card: the selected pin may not survive the filter
               // change, and a card for a hidden pin is confusing.
               setSelectedId(null);
+              setSelectedVenueKey(null);
+              // Photos and restaurants are different sets of places, so the
+              // camera refits to the new one rather than staying where it was.
+              setCamera(null);
+              setTarget(null);
               setFilter(next);
             }}
           />
@@ -516,6 +629,48 @@ export default function MapScreen() {
                   </Text>
                 ) : null}
                 <Text className="mt-0.5 text-xs text-muted">Trykk for å åpne albumet</Text>
+              </View>
+            </Pressable>
+          </Animated.View>
+        ) : null}
+
+        {selectedVenue ? (
+          <Animated.View
+            key={selectedVenue.key}
+            entering={cardEnter}
+            exiting={cardExit}
+            className="mx-5 mb-16">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${selectedVenue.name}, ${formatRating(selectedVenue.average)} av 6 fra ${formatRatingCount(selectedVenue.ratings)}`}
+              onPress={() =>
+                router.push({
+                  pathname: '/album/[id]',
+                  params: { id: selectedVenue.latestAlbumId, post: selectedVenue.latestPostId },
+                })
+              }
+              className="flex-row items-center gap-3 rounded-tile bg-surface p-3 active:opacity-80">
+              <View className="h-14 w-14 items-center justify-center rounded-lg bg-glass">
+                <Dice face={selectedVenue.average} size={30} color="#ffffff" />
+              </View>
+              <View className="flex-1">
+                <Text numberOfLines={1} className="text-base text-ink">
+                  {selectedVenue.name}
+                </Text>
+                <Text numberOfLines={1} className="text-sm text-muted">
+                  {[venueCategoryName(selectedVenue.category), selectedVenue.address]
+                    .filter(Boolean)
+                    .join(' · ') || 'Restaurant'}
+                </Text>
+                <Text className="mt-0.5 text-xs text-muted">
+                  Snitt av {formatRatingCount(selectedVenue.ratings)} · trykk for nyeste
+                </Text>
+              </View>
+              <View className="items-end">
+                <Text className="text-3xl text-ink" style={{ fontVariant: ['tabular-nums'] }}>
+                  {formatRating(selectedVenue.average)}
+                </Text>
+                <Text className="text-xs text-muted">av 6</Text>
               </View>
             </Pressable>
           </Animated.View>

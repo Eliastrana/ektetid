@@ -4,12 +4,15 @@ import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 import { Icon } from '@/components/icon';
+import { AlbumAlertSheet, type AlertAlbum } from '@/components/album-alert-sheet';
 import { AlbumCard } from '@/components/album-card';
 import { FriendSuggestions } from '@/components/friend-suggestions';
 import { useAuth } from '@/components/auth-provider';
 import { PostStream } from '@/components/post-stream';
 import { Screen } from '@/components/screen';
+import { UpdateCard } from '@/components/update-card';
 import { AlbumGridSkeleton } from '@/components/skeleton';
+import { useAlbumAlerts } from '@/lib/album-alerts';
 import { encodeOrigin } from '@/lib/origin';
 import { fetchFeed, type FeedAlbum } from '@/lib/feed';
 
@@ -82,6 +85,8 @@ export default function FeedScreen() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<FeedView>('albums');
   const [viewerPro, setViewerPro] = useState<boolean | null>(null);
+  const [alertAlbum, setAlertAlbum] = useState<AlertAlbum | null>(null);
+  const { ids: alertIds } = useAlbumAlerts(userId);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -124,6 +129,9 @@ export default function FeedScreen() {
         onProPress={openPro}
         onToggle={toggleView}
       />
+      {/* Above suggestions: a newer version is news, and it goes away when
+          dismissed, whereas suggestions are always there. */}
+      <UpdateCard />
       {/* Someone with a handful of friends sees a thin feed and reads it as an
           empty app. Suggestions sit where that gap is felt. */}
       <FriendSuggestions />
@@ -183,6 +191,19 @@ export default function FeedScreen() {
                 album={item}
                 isOwn={item.owner_id === userId}
                 pro={item.ownerPro}
+                alertsOn={alertIds.has(item.id!)}
+                // Not on your own albums: you already hear when a collaborator
+                // posts into them, and nobody else can.
+                onLongPress={
+                  item.owner_id === userId
+                    ? undefined
+                    : () =>
+                        setAlertAlbum({
+                          id: item.id!,
+                          title: item.title ?? '',
+                          owner: item.owner_display_name ?? item.owner_username ?? null,
+                        })
+                }
                 onPress={(origin) =>
                   router.push({
                     pathname: '/album/[id]',
@@ -204,6 +225,8 @@ export default function FeedScreen() {
           <PostStream header={header} />
         )}
       </Screen>
+
+      <AlbumAlertSheet userId={userId} album={alertAlbum} onClose={() => setAlertAlbum(null)} />
     </View>
   );
 }

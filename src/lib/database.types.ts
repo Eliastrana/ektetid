@@ -332,6 +332,39 @@ export type Database = {
           },
         ]
       }
+      album_alerts: {
+        Row: {
+          album_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          album_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          album_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "album_alerts_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "albums"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "album_alerts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_prefs: {
         Row: {
           comments: boolean
@@ -756,6 +789,24 @@ export type Database = {
       can_see_album: { Args: { album: string }; Returns: boolean }
       can_see_album_media: { Args: { object_name: string }; Returns: boolean }
       can_see_post: { Args: { post: string }; Returns: boolean }
+      album_alert_recipients: {
+        Args: { p_album: string }
+        Returns: { user_id: string }[]
+      }
+      venue_ratings: {
+        Args: never
+        Returns: {
+          name: string
+          category: string | null
+          address: string | null
+          latitude: number
+          longitude: number
+          average: number
+          ratings: number
+          latest_post_id: string
+          latest_album_id: string
+        }[]
+      }
       trending_music: {
         Args: { p_limit?: number }
         Returns: {

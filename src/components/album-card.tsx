@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -16,6 +17,13 @@ type Props = {
   album: FeedAlbum;
   /** Receives where the card was on screen, so the album can grow from it. */
   onPress: (origin: Origin | null) => void;
+  /**
+   * Hold for the album's options — today, alerts. Omitted where there is
+   * nothing to offer, such as your own albums.
+   */
+  onLongPress?: () => void;
+  /** You follow this album, so a small bell shows on the cover. */
+  alertsOn?: boolean;
   /**
    * Your own album. Hides the unseen badge, which counts posts you have not
    * seen and is therefore meaningless for something you posted yourself.
@@ -42,6 +50,8 @@ type Props = {
 export function AlbumCard({
   album,
   onPress,
+  onLongPress,
+  alertsOn = false,
   isOwn = false,
   showOwner = true,
   wide = false,
@@ -61,8 +71,23 @@ export function AlbumCard({
       accessibilityRole="button"
       accessibilityLabel={`${album.title}${showOwner ? ` av ${owner}` : ''}, ${count} bilder${
         unseen > 0 ? `, ${unseen} nye` : ''
-      }`}
+      }${alertsOn ? ', varsler på' : ''}`}
+      // A long press is invisible to VoiceOver, so the same sheet is offered as
+      // a named action.
+      accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Varsler for albumet' }] : undefined}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') onLongPress?.();
+      }}
       onPress={() => void measureOrigin(cardRef).then(onPress)}
+      onLongPress={
+        onLongPress
+          ? () => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onLongPress();
+            }
+          : undefined
+      }
+      delayLongPress={350}
       // maxWidth caps a lone card at half the row. With numColumns={2}, flex-1
       // otherwise stretches the last item across the full width when the count
       // is odd, which makes it enormous.
@@ -127,6 +152,22 @@ export function AlbumCard({
               {/*/>*/}
             </View>
           </>
+        ) : null}
+
+        {/* Opposite corner from the unseen badge, and in its style, so the two
+            read as a pair of quiet markers rather than competing for a spot. */}
+        {alertsOn ? (
+          <View
+            pointerEvents="none"
+            className="absolute left-2.5 top-2.5 h-5 w-5 items-center justify-center rounded-full"
+            style={{ backgroundColor: 'rgba(255, 255, 255, 0.82)' }}>
+            <Icon
+              name="bell.fill"
+              size={10}
+              tintColor="#000000"
+              fallback={<Text className="text-[9px] text-black">•</Text>}
+            />
+          </View>
         ) : null}
 
         {unseen > 0 ? (

@@ -22,8 +22,11 @@ export type MapRegion = {
   longitudeDelta: number;
 };
 
-/** Whose pins to show. */
-export type MapFilter = 'all' | 'mine';
+/** Whose pins to show — or, for 'venues', rated restaurants instead of photos. */
+export type MapFilter = 'all' | 'mine' | 'venues';
+
+/** Anything with a place on the map. */
+type Located = { latitude: number; longitude: number };
 
 /**
  * Safety cap on photo-backed pins rendered at once.
@@ -105,11 +108,11 @@ export function expandSmallClusters(
  * images were whichever happened to be most recent, not the ones being
  * looked at.
  */
-export function postsInView(
-  posts: LocatedPost[],
+export function postsInView<T extends Located>(
+  posts: T[],
   region: MapRegion,
   margin = 0.3
-): LocatedPost[] {
+): T[] {
   const latReach = region.latitudeDelta * (0.5 + margin);
   const lngReach = region.longitudeDelta * (0.5 + margin);
   return posts.filter(
@@ -230,7 +233,7 @@ const MIN_DELTA = 0.02;
  * properly means clustering by hemisphere, which is not worth it until someone
  * actually travels that way.
  */
-export function regionFor(posts: LocatedPost[]): MapRegion | null {
+export function regionFor(posts: Located[]): MapRegion | null {
   if (posts.length === 0) return null;
 
   const lats = posts.map((p) => p.latitude);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
+import { AlbumAlertSheet, type AlertAlbum } from '@/components/album-alert-sheet';
 import { AlbumCard } from '@/components/album-card';
 import { ErrorNotice } from '@/components/error-notice';
 import { AlbumGridSkeleton } from '@/components/skeleton';
@@ -14,6 +15,7 @@ import { Screen } from '@/components/screen';
 import { errorMessage } from '@/lib/errors';
 import { acceptFriendRequest, removeFriendship, sendFriendRequest } from '@/lib/friends';
 import type { ReportTarget } from '@/lib/moderation';
+import { useAlbumAlerts } from '@/lib/album-alerts';
 import { encodeOrigin } from '@/lib/origin';
 import { fetchPublicProfile, type PublicProfile } from '@/lib/public-profile';
 
@@ -37,6 +39,8 @@ export default function PublicProfileScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [alertAlbum, setAlertAlbum] = useState<AlertAlbum | null>(null);
+  const { ids: alertIds } = useAlbumAlerts(selfId);
 
   const load = useCallback(async () => {
     if (!id || !selfId) return;
@@ -186,6 +190,17 @@ export default function PublicProfileScreen() {
               album={item}
               pro={data.isPro}
               showOwner={false}
+              alertsOn={alertIds.has(item.id!)}
+              onLongPress={
+                item.owner_id === selfId
+                  ? undefined
+                  : () =>
+                      setAlertAlbum({
+                        id: item.id!,
+                        title: item.title ?? '',
+                        owner: data.profile.display_name ?? data.profile.username ?? null,
+                      })
+              }
               onPress={(origin) =>
                 router.push({
                   pathname: '/album/[id]',
@@ -204,6 +219,8 @@ export default function PublicProfileScreen() {
           )}
         />
       </Screen>
+
+      <AlbumAlertSheet userId={selfId} album={alertAlbum} onClose={() => setAlertAlbum(null)} />
 
       <ReportSheet
         selfId={selfId}

@@ -1,34 +1,72 @@
 import * as Haptics from 'expo-haptics';
 import { useRef, useState } from 'react';
-import { FlatList, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
+import { NotificationOptIn } from '@/components/notification-opt-in';
 import { useAuth } from '@/components/auth-provider';
+import { ProCard } from '@/components/pro-card';
 import { Screen } from '@/components/screen';
 
-const PAGES = [
+type IntroPage = {
+  kind: 'intro';
+  icon: 'camera.fill' | 'person.2.fill' | 'map.fill';
+  title: string;
+  body: string;
+};
+
+type Page =
+  | IntroPage
+  | { kind: 'notifications'; title: string; body: string }
+  | { kind: 'pro'; title: string };
+
+const PAGES: Page[] = [
   {
+    kind: 'intro',
     icon: 'camera.fill',
-    title: 'Ta bildet. Ta selfien.',
-    body: 'Velg Bilde eller Video, ta øyeblikket og legg ved reaksjonen din med frontkameraet.',
+    title: 'Del dine beste øyeblikk',
+    body: 'Velg Bilde eller Video, ta øyeblikket og legg det i et album.',
   },
   {
+    kind: 'intro',
     icon: 'person.2.fill',
-    title: 'Bare ekte venner',
+    title: 'En nærere opplevelse',
     body: 'Albumene dine er private. Bare venner du godkjenner kan se innleggene dine.',
   },
   {
+    kind: 'intro',
     icon: 'map.fill',
     title: 'Finn minnene igjen',
-    body: 'Se innlegg i en vertikal strøm eller finn dem på kartet. Du bestemmer hva som deles.',
+    body: 'Se innlegg andre har lagt ut, enten på forsiden eller på kartet.',
   },
-] as const;
+  // Before Pro: the one thing on these pages that changes whether the app
+  // works for you. Without a registered device, friends' posts arrive silently.
+  {
+    kind: 'notifications',
+    title: 'Ikke gå glipp av noe',
+    body: 'Få varsel når venner legger ut nye øyeblikk, kommenterer eller vil bli venn med deg. Du velger selv hva du får varsel om i profilen.',
+  },
+  // Last, once the app has been explained. Offered, never required: the
+  // button below always lets you continue without buying.
+  { kind: 'pro', title: 'EkteTid Pro' },
+];
+
+/**
+ * Off iOS there is no till — see pro-card-earned.tsx — so the page talks
+ * about earning Pro rather than buying it.
+ */
+const PRO_BODY =
+  process.env.EXPO_OS === 'ios'
+    ? 'Et engangskjøp, ingen abonnement. Du kan også låse det opp gratis ved å dele 20 innlegg i minst tre album.'
+    : 'Lås opp Pro gratis ved å dele 20 innlegg i minst tre album.';
 
 export default function OnboardingScreen() {
   const { width } = useWindowDimensions();
-  const listRef = useRef<FlatList<(typeof PAGES)[number]>>(null);
+  const listRef = useRef<FlatList<Page>>(null);
   const [page, setPage] = useState(0);
-  const { completeOnboarding } = useAuth();
+  const [isPro, setIsPro] = useState(false);
+  const { completeOnboarding, session } = useAuth();
+  const userId = session?.user.id;
   const last = page === PAGES.length - 1;
 
   return (
@@ -61,15 +99,41 @@ export default function OnboardingScreen() {
           onMomentumScrollEnd={(event) =>
             setPage(Math.round(event.nativeEvent.contentOffset.x / width))
           }
-          renderItem={({ item }) => (
-            <View style={{ width }} className="flex-1 items-center justify-center px-10">
-              <View className="h-28 w-28 items-center justify-center rounded-[32px] bg-glass">
-                <Icon name={item.icon} size={48} tintColor="#ffffff" />
+          renderItem={({ item }) =>
+            item.kind === 'pro' ? (
+              // Scrolls on its own: the card is taller than the other pages'
+              // content, and on a small phone it would otherwise be cut off
+              // above the buttons.
+              <ScrollView
+                style={{ width }}
+                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+                contentContainerClassName="px-6 py-4"
+                showsVerticalScrollIndicator={false}>
+                <Text className="text-center text-4xl text-ink">{item.title}</Text>
+                <Text className="mb-6 mt-3 text-center text-base leading-6 text-muted">
+                  {PRO_BODY}
+                </Text>
+                {userId ? <ProCard userId={userId} onProChange={setIsPro} /> : null}
+              </ScrollView>
+            ) : item.kind === 'notifications' ? (
+              <View style={{ width }} className="flex-1 items-center justify-center px-10">
+                <View className="h-28 w-28 items-center justify-center rounded-[32px] bg-glass">
+                  <Icon name="bell.fill" size={48} tintColor="#ffffff" />
+                </View>
+                <Text className="mt-10 text-center text-4xl text-ink">{item.title}</Text>
+                <Text className="mt-4 text-center text-base leading-6 text-muted">{item.body}</Text>
+                {userId ? <NotificationOptIn userId={userId} /> : null}
               </View>
-              <Text className="mt-10 text-center text-4xl text-ink">{item.title}</Text>
-              <Text className="mt-4 text-center text-base leading-6 text-muted">{item.body}</Text>
-            </View>
-          )}
+            ) : (
+              <View style={{ width }} className="flex-1 items-center justify-center px-10">
+                <View className="h-28 w-28 items-center justify-center rounded-[32px] bg-glass">
+                  <Icon name={item.icon} size={48} tintColor="#ffffff" />
+                </View>
+                <Text className="mt-10 text-center text-4xl text-ink">{item.title}</Text>
+                <Text className="mt-4 text-center text-base leading-6 text-muted">{item.body}</Text>
+              </View>
+            )
+          }
         />
 
         <View className="gap-5 px-6 pb-4">
@@ -92,8 +156,15 @@ export default function OnboardingScreen() {
                 setPage(page + 1);
               }
             }}
-            className="h-14 items-center justify-center rounded-tile bg-ink active:opacity-80">
-            <Text className="text-base text-canvas">{last ? 'Kom i gang' : 'Neste'}</Text>
+            // On the Pro page the card carries the filled purchase button, so
+            // this steps back to an outline — two solid buttons stacked read as
+            // two equally weighted choices.
+            className={`h-14 items-center justify-center rounded-tile active:opacity-80 ${
+              last && !isPro ? 'border border-glass-strong' : 'bg-ink'
+            }`}>
+            <Text className={`text-base ${last && !isPro ? 'text-ink' : 'text-canvas'}`}>
+              {last ? (isPro ? 'Kom i gang' : 'Fortsett uten Pro') : 'Neste'}
+            </Text>
           </Pressable>
         </View>
       </Screen>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
-import { CountPin, PhotoPin, PIN_HEIGHT, PIN_WIDTH } from '@/components/photo-pin';
+import { CountPin, PhotoPin, PIN_HEIGHT, PIN_WIDTH, RatingPin } from '@/components/photo-pin';
 import { MAX_MAP_PHOTO_PINS, type LocatedPost } from '@/lib/map';
 import { prefetchStorageImages } from '@/lib/images';
 
@@ -12,30 +12,41 @@ import { prefetchStorageImages } from '@/lib/images';
 const cache = new Map<string, ImageRef>();
 
 /**
- * One pin awaiting capture, of either kind.
+ * One pin awaiting capture, of any kind.
  *
  * `id` is what the map will look the finished icon up by; `cacheKey` is what
  * makes two pins the same drawing. For photos those differ (many posts, one
  * image each), but every cluster showing the same number is one identical
  * picture — so counts key on the number and are drawn once however many
- * bubbles use them.
+ * bubbles use them. Ratings work the same way: every "5,3" is one drawing.
  */
 type PendingPin = {
   id: string;
   cacheKey: string;
   run: number;
-} & ({ kind: 'photo'; post: LocatedPost } | { kind: 'count'; count: number });
+} & (
+  | { kind: 'photo'; post: LocatedPost }
+  | { kind: 'count'; count: number }
+  | { kind: 'rating'; label: string }
+);
 
 type Props = {
   /** Posts drawn as their own photo. */
   posts: LocatedPost[];
   /** Distinct cluster sizes needing a numbered pin. */
   counts: number[];
+  /** Distinct formatted scores ("5,3") needing a rating pin. */
+  ratings?: string[];
   onReady: (icons: Map<string, ImageRef>) => void;
 };
 
 /** How the map addresses a numbered pin. */
 export const countIconId = (count: number) => `count:${count}`;
+
+/** How the map addresses a rating pin. */
+export const ratingIconId = (label: string) => `rating:${label}`;
+
+const NO_RATINGS: string[] = [];
 
 /**
  * Renders pins offscreen, captures each one, and hands back native image refs.
@@ -45,7 +56,7 @@ export const countIconId = (count: number) => `count:${count}`;
  * host sits at a large negative offset rather than behind `opacity: 0` or
  * `display: none`: a view that is not actually laid out captures blank.
  */
-export function PinFactory({ posts, counts, onReady }: Props) {
+export function PinFactory({ posts, counts, ratings = NO_RATINGS, onReady }: Props) {
   const [pending, setPending] = useState<PendingPin | null>(null);
   const hostRef = useRef<View>(null);
   const queue = useRef<PendingPin[]>([]);
@@ -68,13 +79,19 @@ export function PinFactory({ posts, counts, onReady }: Props) {
     queue.current = [];
     const wanted = posts.slice(0, MAX_MAP_PHOTO_PINS).filter((post) => post.imageUrl);
     const wantedCounts = [...new Set(counts)];
+    const wantedRatings = [...new Set(ratings)];
 
     // The first render contains coordinates but deliberately has no signed
     // URLs. Keep any already-visible cached icons during that short phase;
     // clearing them here is what made revisiting the map flash back to the
-    // loading glyphs. Numbered pins need nothing signed, so a view of nothing
-    // but clusters must not be caught by this.
-    if (posts.length > 0 && wanted.length === 0 && wantedCounts.length === 0) {
+    // loading glyphs. Numbered and rating pins need nothing signed, so a view
+    // of nothing but those must not be caught by this.
+    if (
+      posts.length > 0 &&
+      wanted.length === 0 &&
+      wantedCounts.length === 0 &&
+      wantedRatings.length === 0
+    ) {
       setPending(null);
       return () => {
         if (activeRun.current === run) activeRun.current += 1;
@@ -107,6 +124,13 @@ export function PinFactory({ posts, counts, onReady }: Props) {
       else uncached.push({ kind: 'count', id, cacheKey: id, count, run });
     }
 
+    for (const label of wantedRatings) {
+      const id = ratingIconId(label);
+      const hit = cache.get(id);
+      if (hit) results.current.set(id, hit);
+      else uncached.push({ kind: 'rating', id, cacheKey: id, label, run });
+    }
+
     // Cached pins are useful immediately. Previously they were withheld until
     // every uncached pin had also rendered, which defeated the cache visually.
     onReady(new Map(results.current));
@@ -127,7 +151,7 @@ export function PinFactory({ posts, counts, onReady }: Props) {
         queue.current = [];
       }
     };
-  }, [counts, next, onReady, posts]);
+  }, [counts, next, onReady, posts, ratings]);
 
   const capture = useCallback(async () => {
     const item = pending;
@@ -162,11 +186,11 @@ export function PinFactory({ posts, counts, onReady }: Props) {
     }
   }, [next, onReady, pending]);
 
-  // A numbered pin has no image to decode, so nothing will report it ready.
-  // One paint frame after it mounts is enough, and matches the frame the photo
-  // path waits for after onLoad.
+  // Numbered and rating pins have no image to decode, so nothing will report
+  // them ready. One paint frame after mounting is enough, and matches the frame
+  // the photo path waits for after onLoad.
   useEffect(() => {
-    if (pending?.kind !== 'count') return;
+    if (pending?.kind !== 'count' && pending?.kind !== 'rating') return;
     const frame = requestAnimationFrame(() => void capture());
     return () => cancelAnimationFrame(frame);
   }, [capture, pending]);
@@ -205,6 +229,8 @@ export function PinFactory({ posts, counts, onReady }: Props) {
         <View ref={hostRef} collapsable={false}>
           {pending.kind === 'count' ? (
             <CountPin key={pending.id} count={pending.count} />
+          ) : pending.kind === 'rating' ? (
+            <RatingPin key={pending.id} label={pending.label} />
           ) : pending.post.imageUrl ? (
             <PhotoPin
               // Keyed so a new post remounts the image and fires onLoaded again;
