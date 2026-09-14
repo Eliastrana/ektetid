@@ -1,0 +1,97 @@
+import { SymbolView, type AndroidSymbol, type SymbolViewProps } from 'expo-symbols';
+import type { SFSymbol } from 'sf-symbols-typescript';
+
+/**
+ * SF Symbol names paired with their Material Symbols equivalents.
+ *
+ * SF Symbols exist only on Apple platforms. expo-symbols renders a Material
+ * Symbols glyph everywhere else, but only when handed the object form of
+ * `name` — given a plain string it quietly falls through to `fallback`, which
+ * is why every icon in the web build was invisible.
+ *
+ * Anything missing here still renders correctly on iOS and falls back
+ * elsewhere, so an unmapped icon degrades rather than breaking.
+ */
+const MATERIAL: Partial<Record<SFSymbol, AndroidSymbol>> = {
+  'arrow.down.forward.and.arrow.up.backward': 'close_fullscreen',
+  'arrow.up': 'arrow_upward',
+  'arrow.up.right': 'arrow_outward',
+  'arrow.up.backward.and.arrow.down.forward': 'open_in_full',
+  'arrow.triangle.2.circlepath': 'swap_horiz',
+  'arrow.triangle.2.circlepath.camera.fill': 'flip_camera_ios',
+  bell: 'notifications',
+  'bell.fill': 'notifications_active',
+  'bell.slash': 'notifications_off',
+  'bolt.badge.a': 'flash_auto',
+  'bolt.slash.fill': 'flash_off',
+  'bubble.left': 'chat_bubble',
+  'bubble.left.fill': 'chat_bubble',
+  'camera.fill': 'photo_camera',
+  checkmark: 'check',
+  'chevron.left': 'chevron_left',
+  'chevron.right': 'chevron_right',
+  'clock.arrow.circlepath': 'history',
+  ellipsis: 'more_horiz',
+  'exclamationmark.triangle.fill': 'warning',
+  'fork.knife': 'restaurant',
+  eye: 'visibility',
+  'eye.fill': 'visibility',
+  'eye.slash': 'visibility_off',
+  'gearshape.fill': 'settings',
+  heart: 'favorite',
+  hourglass: 'hourglass_empty',
+  'heart.fill': 'favorite',
+  link: 'link',
+  'line.3.horizontal': 'menu',
+  'map.fill': 'map',
+  'music.note': 'music_note',
+  memories: 'auto_awesome',
+  message: 'chat',
+  pencil: 'edit',
+  'paperplane.fill': 'send',
+  'person.2.fill': 'group',
+  'person.crop.square': 'account_box',
+  'photo.on.rectangle': 'photo_library',
+  'photo.on.rectangle.angled': 'photo_library',
+  'pause.fill': 'pause',
+  'play.fill': 'play_arrow',
+  plus: 'add',
+  'rectangle.stack.fill': 'collections',
+  'slider.horizontal.3': 'tune',
+  sparkles: 'auto_awesome',
+  'speaker.slash.fill': 'volume_off',
+  'speaker.wave.2.fill': 'volume_up',
+  'square.and.arrow.down': 'download',
+  'square.and.arrow.up': 'share',
+  'square.grid.2x2.fill': 'grid_view',
+  trash: 'delete',
+  xmark: 'close',
+};
+
+/**
+ * An SF Symbol that also draws on Android and the web.
+ *
+ * A thin wrapper over SymbolView whose only job is supplying the cross-platform
+ * name. Call sites name the icon the way iOS does — the mapping lives here, so
+ * adding a platform never means touching them again.
+ */
+export function Icon({
+  name,
+  ...rest
+}: Omit<SymbolViewProps, 'name'> & { name: SFSymbol }) {
+  const material = MATERIAL[name];
+
+  if (__DEV__ && !material) {
+    // Off iOS an unmapped name renders the fallback, or nothing at all where
+    // there is none — silently. Saying so is the only way this gets noticed
+    // before someone reports a missing button.
+    console.warn(`Icon "${name}" has no Material mapping; it will not draw off iOS.`);
+  }
+
+  return (
+    <SymbolView
+      name={material ? { ios: name, android: material, web: material } : name}
+      {...rest}
+    />
+  );
+}

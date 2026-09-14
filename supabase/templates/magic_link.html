@@ -1,0 +1,23 @@
+<!--
+  Sign-in email for EkteTid.
+
+  The app asks for a six-digit code rather than following a link: deep-link
+  round-trips are fragile on device, and a code still works when the mail is
+  opened on a different device from the one signing in.
+
+  {{ .Token }} is the six-digit code. Supabase's stock template only renders
+  {{ .ConfirmationURL }}, which is why this override exists — without it the
+  code never reaches the user. Paste the same markup into
+  Authentication → Emails → Magic Link in the dashboard for the cloud project.
+-->
+<h2>Logg inn i EkteTid</h2>
+
+<p>Koden din er:</p>
+
+<p style="font-size: 32px; letter-spacing: 8px; font-weight: 600;">{{ .Token }}</p>
+
+<p>Koden er gyldig i én time og kan bare brukes én gang.</p>
+
+<p style="color: #6b6f76; font-size: 12px;">
+  Har du ikke bedt om å logge inn? Da kan du se bort fra denne e-posten.
+</p>

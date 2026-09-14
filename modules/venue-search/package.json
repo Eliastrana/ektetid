@@ -1,0 +1,8 @@
+{
+  "name": "venue-search",
+  "version": "1.0.0",
+  "description": "Finds nearby places to eat and drink with MapKit, so a photo can be tagged with the venue it was taken in.",
+  "main": "index",
+  "license": "UNLICENSED",
+  "author": "Elias Trana"
+}

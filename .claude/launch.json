@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ektetid-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "expo",
+        "start"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "ektetid-landing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/eliastrana/WebstormProjects/capture/capture",
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

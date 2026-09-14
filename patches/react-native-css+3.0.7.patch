@@ -1,0 +1,34 @@
+diff --git a/node_modules/react-native-css/dist/commonjs/native/styles/index.js b/node_modules/react-native-css/dist/commonjs/native/styles/index.js
+index 222296d..77c3046 100644
+--- a/node_modules/react-native-css/dist/commonjs/native/styles/index.js
++++ b/node_modules/react-native-css/dist/commonjs/native/styles/index.js
+@@ -373,7 +373,11 @@ function nativeStyleMapping(config, props) {
+       continue;
+     }
+     let target = props;
+-    const tokens = path.split(".");
++    // `true` is a documented shorthand in NativeStyleMapping meaning "map to the
++    // prop of the same name" (see runtime.types.d.ts: `true | DotNotation<S>`),
++    // but the runtime only ever handled the string form and called .split on it.
++    // Hits TextInput + textAlign and ImageBackground + backgroundColor.
++    const tokens = (path === true ? key : path).split(".");
+     const lastToken = tokens.pop();
+     for (const token of tokens) {
+       target[token] ??= {};
+diff --git a/node_modules/react-native-css/dist/module/native/styles/index.js b/node_modules/react-native-css/dist/module/native/styles/index.js
+index 067f8ed..e916ec7 100644
+--- a/node_modules/react-native-css/dist/module/native/styles/index.js
++++ b/node_modules/react-native-css/dist/module/native/styles/index.js
+@@ -369,7 +369,11 @@ function nativeStyleMapping(config, props) {
+       continue;
+     }
+     let target = props;
+-    const tokens = path.split(".");
++    // `true` is a documented shorthand in NativeStyleMapping meaning "map to the
++    // prop of the same name" (see runtime.types.d.ts: `true | DotNotation<S>`),
++    // but the runtime only ever handled the string form and called .split on it.
++    // Hits TextInput + textAlign and ImageBackground + backgroundColor.
++    const tokens = (path === true ? key : path).split(".");
+     const lastToken = tokens.pop();
+     for (const token of tokens) {
+       target[token] ??= {};
