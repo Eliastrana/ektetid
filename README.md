@@ -1,56 +1,69 @@
-# Welcome to your Expo app 👋
+# EkteTid
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Share real moments with real friends. Take a photo (with a selfie of your reaction), put it in an album, and only friends you've accepted can see it. Posts show up in a feed, in a vertical stream and on a map.
 
-## Get started
+Available on the [App Store](https://apps.apple.com/no/app/ektetid/id6794649649). Android is a sideloaded APK, and there is a web build (PWA).
 
-1. Install dependencies
+## Stack
 
-   ```bash
-   npm install
-   ```
+- **App:** Expo 57 (React Native 0.86, Expo Router, NativeWind v5)
+- **Backend:** Supabase (Postgres with row-level security, Storage, Edge Functions)
+- **Payments:** a one-time Pro purchase through `expo-iap`, verified server-side (iOS only)
+- **Native modules:** `modules/` (MapKit venue search, volume-button shutter) and iOS widgets in `targets/`
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Getting started
 
 ```bash
-npm run reset-project
+npm install
+cp .env.example .env   # add your Supabase URL and anon key
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+| Command | What it does |
+| --- | --- |
+| `npm start` | Start the dev server |
+| `npm run ios` | Build and run on iOS |
+| `npm run android` | Build and run on Android |
+| `npm run web` | Run in the browser |
+| `npm run typecheck` | TypeScript |
+| `npm run lint` | ESLint |
+| `npm run test:db` | Run `supabase/tests/*.sql` against a local Supabase (`supabase start`) |
 
-### Other setup steps
+**iOS on this Mac:** CocoaPods needs a UTF-8 locale, so run iOS builds as `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npm run ios`. Install on a plugged-in iPhone with `npx expo run:ios --device --configuration Release`.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Project layout
 
-## Learn more
+```
+src/app/          screens (file-based routes)
+src/components/   UI components (.ios / .android / .web variants where platforms differ)
+src/lib/          data access and logic (Supabase queries, publishing, notifications, map)
+supabase/         migrations, Edge Functions (notify, verify-pro-purchase, delete-account), SQL tests
+modules/          local native modules
+targets/          iOS widget targets
+patches/          patch-package fixes, applied on install
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Backend
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Schema changes go in a new numbered file in `supabase/migrations/`. Never edit a migration that has already been applied.
 
-## Join the community
+```bash
+supabase db push                          # apply new migrations
+supabase functions deploy notify          # after changing an Edge Function
+```
 
-Join our community of developers creating universal apps.
+If `db push` tries to re-apply a migration that already exists remotely (for example, one run by hand in the SQL editor), mark it as applied instead: `supabase migration repair --status applied <version>`.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Releasing (iOS)
+
+1. Bump `version` in `app.json`. Apple rejects new builds under a version that is already live; EAS increments the build number on its own.
+2. Build and send to TestFlight:
+   ```bash
+   npx eas-cli build --platform ios --profile production --auto-submit
+   ```
+3. Write the release notes in Norwegian. The app shows them word for word in its "Ny versjon" card.
+
+## Gotchas
+
+- The `lightningcss` override in `package.json` is load-bearing; bumping it breaks CSS bundling.
+- NativeWind ignores `className` on `SafeAreaView`; use the `Screen` component instead.
